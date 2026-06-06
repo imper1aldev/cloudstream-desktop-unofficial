@@ -71,14 +71,14 @@ fun ComposeMpvPlayer(
                     break
                 }
 
-                // Check timeout. Default to 45s to allow Playwright enough time to bypass Cloudflare.
-                // Enforce minimum 45s even if user set it lower in settings, otherwise Cloudflare bypass will always fail.
+                // Check timeout. Allow user to strictly control how long they wait before skipping.
+                // We default to 20s if not set. If they set it to 5s, we respect it.
                 val timeoutStr = com.lagradost.common.storage.DesktopDataStore.getKey<String>(PlayerConfig.PREF_AUTO_PLAY_TIMEOUT)
-                val userTimeout = timeoutStr?.toLongOrNull() ?: 45000L
-                val timeoutMs = maxOf(userTimeout, 45000L)
+                val timeoutMs = timeoutStr?.toLongOrNull() ?: 20000L
+                
                 if (!hasEverPlayed && System.currentTimeMillis() - startTime > timeoutMs) {
-                    com.lagradost.common.logging.AppLogger.e("MPV timeout reached while buffering")
-                    onPlaybackError("Connection timed out. The stream might be dead.")
+                    com.lagradost.common.logging.AppLogger.e("MPV timeout reached while buffering ($timeoutMs ms)")
+                    onPlaybackError("Connection timed out. The stream might be dead or too slow.")
                     break
                 }
 

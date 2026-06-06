@@ -34,6 +34,7 @@ import com.lagradost.common.storage.WatchHistory
 import com.lagradost.player.impl.PlayerLinkHandler
 import com.lagradost.player.impl.VlcPlayer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 
@@ -212,11 +213,27 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
     LaunchedEffect(vlcState.error, embeddedError) {
         val errorMessage = vlcState.error ?: embeddedError
         if (errorMessage != null) {
-            playerLaunchError = errorMessage
-            statusText = "Playback failed: $errorMessage"
-            isLaunchingPlayer = false
-            currentPlayingUrl = null
-            embeddedError = null
+            val autoPlay = com.lagradost.common.storage.DesktopDataStore.getKey<Boolean>(com.lagradost.cloudstream3.desktop.player.PlayerConfig.PREF_AUTO_PLAY) ?: true
+            val currentIndex = filteredLinks.indexOfFirst { it.url == currentPlayingUrl }
+            val isVlcError = vlcState.error != null
+
+            // Only auto-skip for VLC. Embedded player handles its own internal auto-skip.
+            // If embeddedError is set, it means the embedded player completely ran out of links.
+            if (autoPlay && isVlcError && currentIndex != -1 && currentIndex + 1 < filteredLinks.size) {
+                val nextLink = filteredLinks[currentIndex + 1]
+                statusText = "Link failed. Auto-trying next: ${nextLink.name}"
+                embeddedError = null
+                playerLaunchError = null
+                // Small delay to prevent UI freezing if many links fail instantly
+                delay(800)
+                playLink(nextLink)
+            } else {
+                playerLaunchError = errorMessage
+                statusText = "Playback failed: $errorMessage"
+                isLaunchingPlayer = false
+                currentPlayingUrl = null
+                embeddedError = null
+            }
         }
     }
 
@@ -238,11 +255,6 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
                         coroutineScope.launch {
                             links.add(link)
                             statusText = "Found ${links.size} stream${if (links.size == 1) "" else "s"}..."
-                            if (links.size >= 25) {
-                                scrapeJob?.cancel()
-                                isScraping = false
-                                statusText = "Ready — ${links.size} streams available (Auto-stopped)."
-                            }
                         }
                     },
                 )
