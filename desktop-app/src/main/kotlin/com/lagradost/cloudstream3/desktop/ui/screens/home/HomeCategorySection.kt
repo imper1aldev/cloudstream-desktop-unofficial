@@ -83,23 +83,14 @@ fun HomeCategorySection(
 
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessLow),
+        animationSpec = tween(300),
         label = "alpha",
-    )
-    val offsetX by animateDpAsState(
-        targetValue = if (visible) 0.dp else (-30).dp,
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-        ),
-        label = "offset",
     )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .alpha(alpha)
-            .offset(x = offsetX),
+            .alpha(alpha),
     ) {
         // Header logic moved inside the loop to prevent awkward gaps
 
