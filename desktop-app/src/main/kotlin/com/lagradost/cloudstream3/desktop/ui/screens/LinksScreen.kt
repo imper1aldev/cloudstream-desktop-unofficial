@@ -8,6 +8,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,11 +56,22 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
     var embeddedError by remember { mutableStateOf<String?>(null) }
 
     var selectedQuality by remember { mutableStateOf<String?>(null) }
+    var selectedType by remember { mutableStateOf("All") }
+    val availableTypes = listOf("All", "HLS (Fast Stream)", "MP4 (Downloadable)")
     var currentPlayingUrl by remember { mutableStateOf<String?>(null) }
 
     val availableQualities = remember(links.size) { links.map { it.quality.toString() }.distinct().sorted() }
-    val filteredLinks = remember(links.size, selectedQuality) {
-        if (selectedQuality == null) links else links.filter { it.quality.toString() == selectedQuality }
+    val filteredLinks = remember(links.size, selectedQuality, selectedType) {
+        links.filter { link ->
+            val qualityMatches = selectedQuality == null || link.quality.toString() == selectedQuality
+            val isHls = link.isM3u8 || link.name.contains("HLS", ignoreCase = true) || link.url.contains(".m3u8")
+            val typeMatches = when (selectedType) {
+                "HLS (Fast Stream)" -> isHls
+                "MP4 (Downloadable)" -> !isHls
+                else -> true
+            }
+            qualityMatches && typeMatches
+        }
     }
 
     val displayTitle = remember(history) {
@@ -225,6 +238,11 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
                         coroutineScope.launch {
                             links.add(link)
                             statusText = "Found ${links.size} stream${if (links.size == 1) "" else "s"}..."
+                            if (links.size >= 25) {
+                                scrapeJob?.cancel()
+                                isScraping = false
+                                statusText = "Ready — ${links.size} streams available (Auto-stopped)."
+                            }
                         }
                     },
                 )
@@ -291,6 +309,29 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
                             selectedQuality = selectedQuality,
                             onSelect = { selectedQuality = it },
                         )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Stream", style = MaterialTheme.typography.labelLarge, color = DesktopUi.TextMuted)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(availableTypes) { type ->
+                                FilterChip(
+                                    selected = selectedType == type,
+                                    onClick = { selectedType = type },
+                                    label = { Text(type) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = DesktopUi.AccentSoft,
+                                        selectedLabelColor = DesktopUi.Accent,
+                                    ),
+                                )
+                            }
+                        }
                     }
 
                     LazyColumn(
