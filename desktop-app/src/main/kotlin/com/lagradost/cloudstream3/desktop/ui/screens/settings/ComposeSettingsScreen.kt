@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.desktop.ui.screens.settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,12 +68,39 @@ fun ComposeSettingsScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Box(modifier = Modifier.fillMaxSize()) {
-                when (selectedTab) {
-                    SettingsTab.PLAYER -> SettingsPlayer()
-                    SettingsTab.APPEARANCE -> SettingsAppearance()
-                    SettingsTab.NETWORK -> SettingsNetwork()
-                    SettingsTab.ADVANCED -> SettingsAdvanced()
-                    SettingsTab.ABOUT -> SettingsAbout()
+                androidx.compose.animation.AnimatedContent(
+                    targetState = selectedTab,
+                    transitionSpec = {
+                        val duration = 250
+                        if (targetState.ordinal > initialState.ordinal) {
+                            androidx.compose.animation.slideInHorizontally(
+                                animationSpec = androidx.compose.animation.core.tween(duration),
+                                initialOffsetX = { it / 4 }
+                            ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(duration)) togetherWith
+                            androidx.compose.animation.slideOutHorizontally(
+                                animationSpec = androidx.compose.animation.core.tween(duration),
+                                targetOffsetX = { -it / 4 }
+                            ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(duration))
+                        } else {
+                            androidx.compose.animation.slideInHorizontally(
+                                animationSpec = androidx.compose.animation.core.tween(duration),
+                                initialOffsetX = { -it / 4 }
+                            ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(duration)) togetherWith
+                            androidx.compose.animation.slideOutHorizontally(
+                                animationSpec = androidx.compose.animation.core.tween(duration),
+                                targetOffsetX = { it / 4 }
+                            ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(duration))
+                        }
+                    },
+                    label = "settings_tab_transition"
+                ) { tab ->
+                    when (tab) {
+                        SettingsTab.PLAYER -> SettingsPlayer()
+                        SettingsTab.APPEARANCE -> SettingsAppearance()
+                        SettingsTab.NETWORK -> SettingsNetwork()
+                        SettingsTab.ADVANCED -> SettingsAdvanced()
+                        SettingsTab.ABOUT -> SettingsAbout()
+                    }
                 }
             }
         }
