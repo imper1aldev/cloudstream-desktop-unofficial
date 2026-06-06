@@ -91,6 +91,7 @@ Since GitHub blocks files larger than 100MB, the `libmpv-2.dll` is not checked i
 We have provided easy-to-use batch scripts for Windows users:
 - Double-click **`launch.bat`** to run the application in Development Mode.
 - Double-click **`launch-release.bat`** to run the application without a background console window.
+- Double-click **`compile.bat`** to build the standalone `.exe` distributable (without the MSI installer overhead).
 
 **5. Packaging the Installer:**
 To generate the final `.msi` installer, run the following command in your terminal:
