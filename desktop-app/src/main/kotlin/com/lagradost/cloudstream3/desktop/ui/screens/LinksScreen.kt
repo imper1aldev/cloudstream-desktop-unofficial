@@ -323,16 +323,19 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
                         )
                     }
 
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .padding(horizontal = 20.dp, vertical = 6.dp),
                     ) {
-                        Text("Stream", style = MaterialTheme.typography.labelLarge, color = DesktopUi.TextMuted)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(availableTypes) { type ->
+                        Text("Stream", style = MaterialTheme.typography.labelMedium, color = DesktopUi.TextMuted)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            availableTypes.forEach { type ->
                                 FilterChip(
                                     selected = selectedType == type,
                                     onClick = { selectedType = type },
@@ -449,35 +452,39 @@ private fun StreamStatusCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerSelector(selectedPlayer: String, onSelect: (String) -> Unit) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 20.dp, vertical = 6.dp),
     ) {
-        Text("Player", style = MaterialTheme.typography.labelLarge, color = DesktopUi.TextMuted)
-        Spacer(modifier = Modifier.width(16.dp))
-        FilterChip(
-            selected = selectedPlayer == "mpv",
-            onClick = { onSelect("mpv") },
-            label = { Text("MPV") },
-            colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = DesktopUi.AccentSoft,
-                selectedLabelColor = DesktopUi.Accent,
-            ),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        FilterChip(
-            selected = selectedPlayer == "vlc",
-            onClick = { onSelect("vlc") },
-            label = { Text("VLC") },
-            colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = DesktopUi.AccentSoft,
-                selectedLabelColor = DesktopUi.Accent,
-            ),
-        )
+        Text("Player", style = MaterialTheme.typography.labelMedium, color = DesktopUi.TextMuted)
+        Spacer(modifier = Modifier.height(6.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedPlayer == "mpv",
+                onClick = { onSelect("mpv") },
+                label = { Text("MPV") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = DesktopUi.AccentSoft,
+                    selectedLabelColor = DesktopUi.Accent,
+                ),
+            )
+            FilterChip(
+                selected = selectedPlayer == "vlc",
+                onClick = { onSelect("vlc") },
+                label = { Text("VLC") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = DesktopUi.AccentSoft,
+                    selectedLabelColor = DesktopUi.Accent,
+                ),
+            )
+        }
     }
 }
 
