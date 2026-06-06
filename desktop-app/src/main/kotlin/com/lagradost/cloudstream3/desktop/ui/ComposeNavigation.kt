@@ -16,7 +16,8 @@ import com.lagradost.cloudstream3.desktop.ui.screens.ComposeLibraryScreen
 
 import com.lagradost.common.storage.WatchHistory
 
-
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.with
 
 data class VideoLaunchData(
     val links: List<com.lagradost.cloudstream3.utils.ExtractorLink>,
@@ -59,52 +60,83 @@ fun CloudstreamApp() {
                 color = androidx.compose.material3.MaterialTheme.colorScheme.background,
             ) {
             androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
-                androidx.compose.animation.Crossfade(
-                    targetState = screen,
-                    animationSpec = androidx.compose.animation.core.tween(300),
-                ) { targetScreen ->
-                    when (targetScreen) {
-                        is Screen.Details -> ComposeDetailsScreen(navController, targetScreen.provider, targetScreen.url, targetScreen.preloadedName, targetScreen.preloadedPoster, targetScreen.preloadedBg)
+                val saveableStateHolder = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
 
-                        is Screen.Home -> DesktopAppShell(
-                            navController = navController,
-                            title = "Home",
-                            onErrorLogs = { showErrorsDialog = true },
-                        ) {
-                            ComposeHomeScreen(
+                androidx.compose.animation.AnimatedContent(
+                    targetState = screen,
+                    transitionSpec = {
+                        val isPush = targetState is Screen.Details || targetState is Screen.CategoryGrid
+                        val isPop = initialState is Screen.Details || initialState is Screen.CategoryGrid
+                        
+                        if (isPush) {
+                            androidx.compose.animation.slideInHorizontally(
+                                initialOffsetX = { it },
+                                animationSpec = androidx.compose.animation.core.tween(300)
+                            ) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith
+                            androidx.compose.animation.slideOutHorizontally(
+                                targetOffsetX = { -it / 3 },
+                                animationSpec = androidx.compose.animation.core.tween(300)
+                            ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                        } else if (isPop) {
+                            androidx.compose.animation.slideInHorizontally(
+                                initialOffsetX = { -it / 3 },
+                                animationSpec = androidx.compose.animation.core.tween(300)
+                            ) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith
+                            androidx.compose.animation.slideOutHorizontally(
+                                targetOffsetX = { it },
+                                animationSpec = androidx.compose.animation.core.tween(300)
+                            ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                        } else {
+                            androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith 
+                            androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                        }
+                    },
+                    label = "screen_transition"
+                ) { targetScreen ->
+                    saveableStateHolder.SaveableStateProvider(targetScreen) {
+                        when (targetScreen) {
+                            is Screen.Details -> ComposeDetailsScreen(navController, targetScreen.provider, targetScreen.url, targetScreen.preloadedName, targetScreen.preloadedPoster, targetScreen.preloadedBg)
+    
+                            is Screen.Home -> DesktopAppShell(
                                 navController = navController,
-                                showErrorsDialog = showErrorsDialog,
-                                onDismissErrors = { showErrorsDialog = false },
-                            )
-                        }
-                        is Screen.Extensions -> DesktopAppShell(
-                            navController = navController,
-                            title = "Extensions",
-                            onErrorLogs = { showErrorsDialog = true },
-                        ) {
-                            ComposeExtensionScreen(navController)
-                        }
-                        is Screen.Library -> DesktopAppShell(
-                            navController = navController,
-                            title = "Library",
-                            onErrorLogs = { showErrorsDialog = true },
-                        ) {
-                            ComposeLibraryScreen(navController)
-                        }
-                        is Screen.Settings -> DesktopAppShell(
-                            navController = navController,
-                            title = "Settings",
-                            onErrorLogs = { showErrorsDialog = true },
-                        ) {
-                            com.lagradost.cloudstream3.desktop.ui.screens.settings.ComposeSettingsScreen(navController)
-                        }
-                        is Screen.CategoryGrid -> DesktopAppShell(
-                            navController = navController,
-                            title = targetScreen.title,
-                            showBack = true,
-                            onErrorLogs = { showErrorsDialog = true },
-                        ) {
-                            com.lagradost.cloudstream3.desktop.ui.screens.ComposeCategoryGridScreen(navController, targetScreen.provider, targetScreen.title, targetScreen.items)
+                                title = "Home",
+                                onErrorLogs = { showErrorsDialog = true },
+                            ) {
+                                ComposeHomeScreen(
+                                    navController = navController,
+                                    showErrorsDialog = showErrorsDialog,
+                                    onDismissErrors = { showErrorsDialog = false },
+                                )
+                            }
+                            is Screen.Extensions -> DesktopAppShell(
+                                navController = navController,
+                                title = "Extensions",
+                                onErrorLogs = { showErrorsDialog = true },
+                            ) {
+                                ComposeExtensionScreen(navController)
+                            }
+                            is Screen.Library -> DesktopAppShell(
+                                navController = navController,
+                                title = "Library",
+                                onErrorLogs = { showErrorsDialog = true },
+                            ) {
+                                ComposeLibraryScreen(navController)
+                            }
+                            is Screen.Settings -> DesktopAppShell(
+                                navController = navController,
+                                title = "Settings",
+                                onErrorLogs = { showErrorsDialog = true },
+                            ) {
+                                com.lagradost.cloudstream3.desktop.ui.screens.settings.ComposeSettingsScreen(navController)
+                            }
+                            is Screen.CategoryGrid -> DesktopAppShell(
+                                navController = navController,
+                                title = targetScreen.title,
+                                showBack = true,
+                                onErrorLogs = { showErrorsDialog = true },
+                            ) {
+                                com.lagradost.cloudstream3.desktop.ui.screens.ComposeCategoryGridScreen(navController, targetScreen.provider, targetScreen.title, targetScreen.items)
+                            }
                         }
                     }
                 }
