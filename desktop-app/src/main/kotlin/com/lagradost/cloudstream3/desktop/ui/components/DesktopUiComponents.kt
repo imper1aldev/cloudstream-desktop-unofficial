@@ -139,7 +139,7 @@ fun CategoryRowWithHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 4.dp, top = 20.dp, bottom = 10.dp, end = 4.dp),
+                .padding(start = 4.dp, top = 12.dp, bottom = 8.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {

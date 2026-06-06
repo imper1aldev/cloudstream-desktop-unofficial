@@ -83,12 +83,15 @@ fun HomeCategorySection(
 
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(500),
+        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessLow),
         label = "alpha",
     )
     val offsetX by animateDpAsState(
-        targetValue = if (visible) 0.dp else (-50).dp,
-        animationSpec = tween(500),
+        targetValue = if (visible) 0.dp else (-30).dp,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
         label = "offset",
     )
 
@@ -98,15 +101,7 @@ fun HomeCategorySection(
             .alpha(alpha)
             .offset(x = offsetX),
     ) {
-        if (!isFirstPage) {
-            Text(
-                text = pageData.name,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp),
-            )
-        }
+        // Header logic moved inside the loop to prevent awkward gaps
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
@@ -126,9 +121,22 @@ fun HomeCategorySection(
                     )
                     afterHeroContent()
                 } else {
+                    val titleStr = section.name.takeIf { it.isNotBlank() } ?: pageData.name
+                    val showLargeHeader = sectionIndex == 0 && !isFirstPage && !titleStr.equals(pageData.name, ignoreCase = true)
+                    
+                    if (showLargeHeader) {
+                        Text(
+                            text = pageData.name,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 0.dp),
+                        )
+                    }
+
                     val isLoop = section.list.size >= 4
                     CategoryRowWithHeader(
-                        title = section.name.takeIf { it.isNotBlank() && !it.equals(pageData.name, ignoreCase = true) } ?: "",
+                        title = titleStr,
                         itemCount = section.list.size,
                         isInfinite = isLoop,
                         onViewAll = { onViewAll(provider, section.name, section.list) },
