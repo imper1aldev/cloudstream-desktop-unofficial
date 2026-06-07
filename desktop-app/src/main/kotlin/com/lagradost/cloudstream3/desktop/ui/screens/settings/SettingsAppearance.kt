@@ -106,30 +106,6 @@ fun SettingsAppearance() {
             }
         }
 
-        // Grid Scaling
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Grid Size", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                Text("Adjust the size of poster cards", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    listOf("Compact", "Normal", "Large").forEach { size ->
-                        FilterChip(
-                            selected = gridScale == size,
-                            onClick = { AppearanceConfig.setGridScale(size) },
-                            label = { Text(size) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White,
-                            ),
-                        )
-                    }
-                }
-            }
-        }
 
         // Layout Width
         val layoutWidth by AppearanceConfig.layoutWidth.collectAsState()
