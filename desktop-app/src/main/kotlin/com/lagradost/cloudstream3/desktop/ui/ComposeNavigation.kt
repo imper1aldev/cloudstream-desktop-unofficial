@@ -65,7 +65,7 @@ fun CloudstreamApp() {
                 androidx.compose.animation.AnimatedContent(
                     targetState = screen,
                     modifier = androidx.compose.ui.Modifier.fillMaxSize(),
-                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                    contentAlignment = androidx.compose.ui.Alignment.TopStart,
                     transitionSpec = {
                         val isPush = targetState is Screen.Details || targetState is Screen.CategoryGrid
                         val isPop = initialState is Screen.Details || initialState is Screen.CategoryGrid
@@ -79,7 +79,7 @@ fun CloudstreamApp() {
                                 targetOffsetX = { -it / 3 },
                                 animationSpec = androidx.compose.animation.core.tween(300)
                             ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)))
-                            .using(androidx.compose.animation.SizeTransform(clip = false))
+                            .using(androidx.compose.animation.SizeTransform(clip = false) { _, _ -> androidx.compose.animation.core.snap() })
                             .apply { targetContentZIndex = 1f }
                         } else if (isPop) {
                             (androidx.compose.animation.slideInHorizontally(
@@ -90,12 +90,12 @@ fun CloudstreamApp() {
                                 targetOffsetX = { it },
                                 animationSpec = androidx.compose.animation.core.tween(300)
                             ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)))
-                            .using(androidx.compose.animation.SizeTransform(clip = false))
+                            .using(androidx.compose.animation.SizeTransform(clip = false) { _, _ -> androidx.compose.animation.core.snap() })
                             .apply { targetContentZIndex = -1f }
                         } else {
                             (androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith 
                             androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)))
-                            .using(androidx.compose.animation.SizeTransform(clip = false))
+                            .using(androidx.compose.animation.SizeTransform(clip = false) { _, _ -> androidx.compose.animation.core.snap() })
                         }
                     },
                     label = "screen_transition"
