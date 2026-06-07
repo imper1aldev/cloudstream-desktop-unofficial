@@ -146,8 +146,6 @@ fun PosterCard(
                         .padding(8.dp)
                         .graphicsLayer { alpha = bookmarkAlpha }
                         .size(32.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.6f))
                 ) {
                     Icon(
                         imageVector = if (isBookmarked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
