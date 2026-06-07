@@ -8,8 +8,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.hoverable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -26,6 +32,8 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.cloudstream3.fixUrlNull
+import com.lagradost.common.storage.DesktopBookmark
+import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.common.storage.WatchHistory
 import com.lagradost.player.impl.PlayerLinkHandler
 
@@ -45,11 +53,15 @@ fun PosterCard(
         else -> 190.dp
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
     Surface(
         modifier = modifier
             .width(width)
             .posterHoverEffect()
             .clip(shape)
+            .hoverable(interactionSource)
             .clickable(onClick = onClick),
         shape = shape,
         color = DesktopUi.SurfaceCard,
@@ -97,6 +109,44 @@ fun PosterCard(
                         color = DesktopUi.Accent,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            val bookmarkId = if (provider != null) "${provider.name}_${item.url.hashCode()}" else ""
+            var isBookmarked by remember(bookmarkId) { mutableStateOf(if (bookmarkId.isNotEmpty()) DesktopDataStore.isBookmarked(bookmarkId) else false) }
+
+            AnimatedVisibility(
+                visible = isHovered || isBookmarked,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+            ) {
+                IconButton(
+                    onClick = {
+                        if (provider == null) return@IconButton
+                        if (isBookmarked) {
+                            DesktopDataStore.removeBookmark(bookmarkId)
+                        } else {
+                            DesktopDataStore.addBookmark(
+                                DesktopBookmark(
+                                    id = bookmarkId,
+                                    name = item.name,
+                                    url = item.url,
+                                    apiName = provider.name,
+                                    posterUrl = item.posterUrl,
+                                )
+                            )
+                        }
+                        isBookmarked = !isBookmarked
+                    },
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (isBookmarked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Bookmark",
+                        tint = if (isBookmarked) Color.Red else Color.White,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }

@@ -27,12 +27,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.ui.components.DesktopUi
 import com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme
+import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.cloudstream3.fixUrlNull
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.storage.DesktopBookmark
+import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -409,16 +413,52 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
 
                         Spacer(Modifier.height(26.dp))
 
-                        Button(
-                            onClick = { onItemClick(item, meta?.backdropUrl) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f), contentColor = Color.White),
-                            shape = RoundedCornerShape(24.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp),
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Play / View Details", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Button(
+                                onClick = { onItemClick(item, meta?.backdropUrl) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f), contentColor = Color.White),
+                                shape = RoundedCornerShape(24.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Play / View Details", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            }
+
+                            val bookmarkId = if (provider != null) "${provider.name}_${item.url.hashCode()}" else ""
+                            var isBookmarked by remember(bookmarkId) { mutableStateOf(if (bookmarkId.isNotEmpty()) DesktopDataStore.isBookmarked(bookmarkId) else false) }
+
+                            IconButton(
+                                onClick = {
+                                    if (provider == null) return@IconButton
+                                    if (isBookmarked) {
+                                        DesktopDataStore.removeBookmark(bookmarkId)
+                                    } else {
+                                        DesktopDataStore.addBookmark(
+                                            DesktopBookmark(
+                                                id = bookmarkId,
+                                                name = item.name,
+                                                url = item.url,
+                                                apiName = provider.name,
+                                                posterUrl = item.posterUrl,
+                                            )
+                                        )
+                                    }
+                                    isBookmarked = !isBookmarked
+                                },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = if (isBookmarked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = "Bookmark",
+                                    tint = if (isBookmarked) Color.Red else Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                     }
                 }
