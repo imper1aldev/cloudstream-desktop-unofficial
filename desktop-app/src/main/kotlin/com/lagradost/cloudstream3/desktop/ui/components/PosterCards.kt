@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -116,12 +117,12 @@ fun PosterCard(
             val bookmarkId = if (provider != null) "${provider.name}_${item.url.hashCode()}" else ""
             var isBookmarked by remember(bookmarkId) { mutableStateOf(if (bookmarkId.isNotEmpty()) DesktopDataStore.isBookmarked(bookmarkId) else false) }
 
-            AnimatedVisibility(
-                visible = isHovered || isBookmarked,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                enter = androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.fadeOut()
-            ) {
+            val bookmarkAlpha by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (isHovered || isBookmarked) 1f else 0f,
+                label = "bookmarkAlpha"
+            )
+
+            if (bookmarkAlpha > 0f) {
                 IconButton(
                     onClick = {
                         if (provider == null) return@IconButton
@@ -141,8 +142,12 @@ fun PosterCard(
                         isBookmarked = !isBookmarked
                     },
                     modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .graphicsLayer { alpha = bookmarkAlpha }
                         .size(32.dp)
-                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
                 ) {
                     Icon(
                         imageVector = if (isBookmarked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
