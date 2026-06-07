@@ -118,7 +118,9 @@ fun PosterCard(
 
             AnimatedVisibility(
                 visible = isHovered || isBookmarked,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut()
             ) {
                 IconButton(
                     onClick = {
@@ -152,58 +154,64 @@ fun PosterCard(
             }
 
             // Gradient at the bottom with the title
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0f to Color.Transparent,
-                                0.35f to Color.Black.copy(alpha = 0.7f),
-                                1f to Color.Black.copy(alpha = 0.92f),
-                            ),
-                        ),
-                    )
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
+            AnimatedVisibility(
+                visible = isHovered,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut()
             ) {
-                Column {
-                    // Type badge
-                    val typeLabel = item.quality?.name?.uppercase()
-                        ?: if (item is com.lagradost.cloudstream3.AnimeSearchResponse && !item.dubStatus.isNullOrEmpty()) {
-                            item.dubStatus!!.joinToString(" | ") {
-                                it.name.uppercase().replace("DUBBED", "DUB").replace("SUBBED", "SUB")
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.Transparent,
+                                    0.35f to Color.Black.copy(alpha = 0.7f),
+                                    1f to Color.Black.copy(alpha = 0.92f),
+                                ),
+                            ),
+                        )
+                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                ) {
+                    Column {
+                        // Type badge
+                        val typeLabel = item.quality?.name?.uppercase()
+                            ?: if (item is com.lagradost.cloudstream3.AnimeSearchResponse && !item.dubStatus.isNullOrEmpty()) {
+                                item.dubStatus!!.joinToString(" | ") {
+                                    it.name.uppercase().replace("DUBBED", "DUB").replace("SUBBED", "SUB")
+                                }
+                            } else {
+                                null
                             }
-                        } else {
-                            null
+                        if (typeLabel != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.White.copy(alpha = 0.25f))
+                                    .border(0.5.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = typeLabel,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    letterSpacing = 0.5.sp,
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
                         }
-                    if (typeLabel != null) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.White.copy(alpha = 0.25f))
-                                .border(0.5.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 5.dp, vertical = 2.dp),
-                        ) {
-                            Text(
-                                text = typeLabel,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                letterSpacing = 0.5.sp,
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = item.name,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            lineHeight = 16.sp,
+                        )
                     }
-                    Text(
-                        text = item.name,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        lineHeight = 16.sp,
-                    )
                 }
             }
         }
