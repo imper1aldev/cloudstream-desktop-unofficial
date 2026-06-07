@@ -117,10 +117,17 @@ fun DesktopAppShell(
                             PaddingValues(top = 66.dp, start = 20.dp, end = 20.dp, bottom = 12.dp)
                         }
 
+                        val layoutWidthSetting by AppearanceConfig.layoutWidth.collectAsState()
+                        val maxWidthConstraint = when (layoutWidthSetting) {
+                            "Compact" -> 1000.dp
+                            "Modern" -> 1400.dp
+                            else -> androidx.compose.ui.unit.Dp.Unspecified
+                        }
+
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
-                                .widthIn(max = 1400.dp)
+                                .widthIn(max = maxWidthConstraint)
                         ) {
                             Box(
                                 modifier = Modifier

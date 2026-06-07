@@ -8,11 +8,13 @@ object AppearanceConfig {
     private const val PREF_AMOLED_MODE = "pref_amoled_mode"
     private const val PREF_LIGHT_MODE = "pref_light_mode"
     private const val PREF_GRID_SCALE = "pref_grid_scale"
+    private const val PREF_LAYOUT_WIDTH = "pref_layout_width"
 
     val themeAccent = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_THEME_ACCENT) ?: "Purple")
     val amoledMode = MutableStateFlow(DesktopDataStore.getKey<Boolean>(PREF_AMOLED_MODE) ?: false)
     val isLightMode = MutableStateFlow(DesktopDataStore.getKey<Boolean>(PREF_LIGHT_MODE) ?: false)
     val gridScale = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_GRID_SCALE) ?: "Normal")
+    val layoutWidth = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_LAYOUT_WIDTH) ?: "Modern")
 
     fun setThemeAccent(colorName: String) {
         themeAccent.value = colorName
@@ -32,5 +34,10 @@ object AppearanceConfig {
     fun setGridScale(scale: String) {
         gridScale.value = scale
         DesktopDataStore.setKey(PREF_GRID_SCALE, scale)
+    }
+
+    fun setLayoutWidth(width: String) {
+        layoutWidth.value = width
+        DesktopDataStore.setKey(PREF_LAYOUT_WIDTH, width)
     }
 }
