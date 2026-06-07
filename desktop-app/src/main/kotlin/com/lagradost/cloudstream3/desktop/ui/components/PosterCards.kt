@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.desktop.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -129,7 +130,9 @@ fun PosterCard(
                     if (typeLabel != null) {
                         Box(
                             modifier = Modifier
-                                .background(DesktopUi.Accent.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.25f))
+                                .border(0.5.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 5.dp, vertical = 2.dp),
                         ) {
                             Text(
