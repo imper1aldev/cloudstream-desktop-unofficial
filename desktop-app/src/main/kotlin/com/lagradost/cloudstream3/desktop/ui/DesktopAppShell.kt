@@ -109,6 +109,7 @@ fun DesktopAppShell(
                             .weight(1f)
                             .fillMaxHeight()
                             .background(MaterialTheme.colorScheme.surface),
+                        contentAlignment = Alignment.TopCenter,
                     ) {
                         val contentPadding = if (current is Screen.Home) {
                             PaddingValues(0.dp)
@@ -118,18 +119,24 @@ fun DesktopAppShell(
 
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(contentPadding),
+                                .fillMaxHeight()
+                                .widthIn(max = 1400.dp)
                         ) {
-                            content()
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(contentPadding),
+                            ) {
+                                content()
+                            }
+
+                            TopBar(
+                                showBack = showBack,
+                                onBack = { navController.goBack() },
+                                isHome = current is Screen.Home,
+                            )
                         }
-
-                        TopBar(
-                            showBack = showBack,
-                            onBack = { navController.goBack() },
-                            isHome = current is Screen.Home,
-                        )
-
+                        
                         SnackbarHost(
                             hostState = snackbarHostState,
                             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
