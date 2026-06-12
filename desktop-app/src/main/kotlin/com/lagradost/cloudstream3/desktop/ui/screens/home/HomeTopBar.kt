@@ -154,11 +154,17 @@ fun HomeTopBar(
                 }
 
                 if (isProviderDropdownExpanded) {
-                    Dialog(onDismissRequest = { isProviderDropdownExpanded = false }) {
+                    androidx.compose.ui.window.Popup(
+                        alignment = Alignment.TopCenter,
+                        onDismissRequest = { isProviderDropdownExpanded = false },
+                        properties = androidx.compose.ui.window.PopupProperties(focusable = true)
+                    ) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFF161620),
-                            modifier = Modifier.width(520.dp).heightIn(max = 800.dp),
+                            color = DesktopUi.SurfaceElevated,
+                            border = BorderStroke(1.dp, DesktopUi.Accent.copy(alpha = 0.5f)),
+                            shadowElevation = 16.dp,
+                            modifier = Modifier.padding(top = 100.dp).width(520.dp).heightIn(max = 600.dp),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                                 Text(

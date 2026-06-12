@@ -20,13 +20,9 @@ fun SettingsPlayer() {
     var autoPlay by remember { mutableStateOf(DesktopDataStore.getKey<Boolean>(PlayerConfig.PREF_AUTO_PLAY) ?: true) }
     var autoPlayTimeout by remember { mutableStateOf(DesktopDataStore.getKey<String>(PlayerConfig.PREF_AUTO_PLAY_TIMEOUT) ?: "15000") }
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Video Player Options", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(16.dp))
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Text("Video Player Options", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(24.dp))
 
             // Hardware Acceleration
             PlayerDropdownSetting(
@@ -139,7 +135,6 @@ fun SettingsPlayer() {
                 },
             )
         }
-    }
 }
 
 @Composable

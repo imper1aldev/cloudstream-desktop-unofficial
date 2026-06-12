@@ -26,6 +26,10 @@ desktop-app/appResources/
 *.dll
 *.so
 *.dylib
+*.7z
+*.zip
+*.tar.gz
+*.rar
 ms-playwright/
 
 # OS

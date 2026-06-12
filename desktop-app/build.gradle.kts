@@ -91,10 +91,29 @@ compose.desktop {
             // Windows only — no Mac or Linux targets
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
             packageName = "CloudStream-Desktop"
-            packageVersion = "0.1.0"
+            packageVersion = "0.1.1"
             description = "CloudStream Desktop Client"
             vendor = "CloudStream"
-            includeAllModules = true // Required — jlink cannot detect dynamically-loaded modules (JNA, Playwright, Conscrypt)
+            includeAllModules = false
+            modules(
+                "java.base",
+                "java.desktop",
+                "java.instrument",
+                "java.logging",
+                "java.management",
+                "java.naming",
+                "java.net.http",
+                "java.prefs",
+                "java.scripting",
+                "java.sql",
+                "java.xml",
+                "jdk.dynalink",
+                "jdk.unsupported", // Required by JNA & Coroutines Unsafe
+                "jdk.crypto.ec", // Required for HTTPS
+                "jdk.crypto.cryptoki",
+                "jdk.management",
+                "jdk.zipfs" // Required by dex2jar for JAR generation
+            )
             appResourcesRootDir.set(project.layout.projectDirectory.dir("appResources"))
 
             windows {

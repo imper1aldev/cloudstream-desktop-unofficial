@@ -25,7 +25,7 @@ fun SettingsAdvanced() {
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -48,7 +48,7 @@ fun SettingsAdvanced() {
             }
         }
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -81,7 +81,7 @@ fun SettingsAdvanced() {
             }
         }
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -282,7 +282,7 @@ fun SettingsAdvanced() {
         }
 
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {

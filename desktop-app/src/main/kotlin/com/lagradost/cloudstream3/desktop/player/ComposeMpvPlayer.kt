@@ -495,6 +495,7 @@ private fun resolveMpvExecutable(isWindows: Boolean): File? {
         File("2_cloudstream_desktop/mpv"),
         File("desktop-app/mpv"),
         File("desktop-app/appResources/mpv"),
+        File("desktop-app/appResources/windows/mpv"),
     )
     for (base in candidates) {
         for (name in names) {

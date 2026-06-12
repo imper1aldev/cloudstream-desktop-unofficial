@@ -3,7 +3,9 @@ package com.lagradost.cloudstream3.desktop.ui.screens.settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -11,7 +13,7 @@ import androidx.compose.ui.unit.dp
 fun SettingsAbout() {
     Column {
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {

@@ -11,6 +11,9 @@ import com.lagradost.cloudstream3.desktop.ui.navigation.NavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
+
 @Composable
 fun ComposeExtensionScreen(navController: NavController) {
     var selectedTab by remember { mutableStateOf(0) }
@@ -26,28 +29,73 @@ fun ComposeExtensionScreen(navController: NavController) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            TabRow(
-                selectedTabIndex = selectedTab,
-                modifier = Modifier.widthIn(max = 400.dp),
+    Row(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 32.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Row(modifier = Modifier.widthIn(max = 1200.dp).fillMaxSize()) {
+            
+            // Left Pane: Sidebar Navigation
+            Column(
+                modifier = Modifier
+                    .width(220.dp)
+                    .fillMaxHeight()
+                    .padding(end = 24.dp)
             ) {
+                Text(
+                    text = "Extensions", 
+                    style = MaterialTheme.typography.headlineMedium, 
+                    color = MaterialTheme.colorScheme.onSurface, 
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 32.dp, start = 8.dp)
+                )
+                
                 tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
+                    val isSelected = selectedTab == index
+                    Surface(
                         onClick = { selectedTab = index },
-                        text = { Text(title) },
-                    )
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = title,
+                                color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
                 }
             }
-        }
-
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            Box(modifier = Modifier.widthIn(max = 1000.dp).fillMaxHeight()) {
-                when (selectedTab) {
-                    0 -> BrowseTab(viewModel = viewModel, syncGeneration = syncGen)
-                    1 -> InstalledTab(viewModel = viewModel, syncGeneration = syncGen)
-                    2 -> RepositoriesTab(viewModel = viewModel)
+            
+            // Vertical Divider
+            VerticalDivider(
+                modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
+            
+            // Right Pane: Content area
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(start = 32.dp)
+            ) {
+                androidx.compose.animation.Crossfade(
+                    targetState = selectedTab,
+                    animationSpec = androidx.compose.animation.core.tween(200),
+                    label = "extensions_crossfade"
+                ) { tabIndex ->
+                    when (tabIndex) {
+                        0 -> BrowseTab(viewModel = viewModel, syncGeneration = syncGen)
+                        1 -> InstalledTab(viewModel = viewModel, syncGeneration = syncGen)
+                        2 -> RepositoriesTab(viewModel = viewModel)
+                    }
                 }
             }
         }

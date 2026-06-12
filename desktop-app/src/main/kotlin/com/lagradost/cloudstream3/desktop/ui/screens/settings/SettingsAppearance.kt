@@ -29,138 +29,124 @@ fun SettingsAppearance() {
     )
 
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Text("Appearance Settings", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(24.dp))
+
         // Theme Color Picker
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Theme Color", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    accentColors.forEach { (name, color) ->
-                        val isSelected = themeAccent == name
+        Text("Theme Color", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            accentColors.forEach { (name, color) ->
+                val isSelected = themeAccent == name
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                        .clickable { AppearanceConfig.setThemeAccent(name) },
+                ) {
+                    if (isSelected) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(16.dp)
                                 .clip(CircleShape)
-                                .background(color)
-                                .clickable { AppearanceConfig.setThemeAccent(name) },
-                        ) {
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                        .align(Alignment.Center),
-                                )
-                            }
-                        }
+                                .background(Color.White)
+                                .align(Alignment.Center),
+                        )
                     }
                 }
             }
         }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Light Theme Toggle
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text("Light Theme", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                    Text("Use a bright white interface", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(
-                    checked = isLightMode,
-                    onCheckedChange = {
-                        AppearanceConfig.setLightMode(it)
-                        if (it) AppearanceConfig.setAmoledMode(false)
-                    },
-                    colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Light Theme", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+                Text("Use a bright white interface", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Switch(
+                checked = isLightMode,
+                onCheckedChange = {
+                    AppearanceConfig.setLightMode(it)
+                    if (it) AppearanceConfig.setAmoledMode(false)
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+            )
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
         // AMOLED Toggle
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text("AMOLED Mode", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                    Text("Pure black background for OLED screens", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(
-                    checked = amoledMode,
-                    onCheckedChange = {
-                        AppearanceConfig.setAmoledMode(it)
-                        if (it) AppearanceConfig.setLightMode(false)
-                    },
-                    colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Text("AMOLED Mode", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+                Text("Pure black background for OLED screens", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Switch(
+                checked = amoledMode,
+                onCheckedChange = {
+                    AppearanceConfig.setAmoledMode(it)
+                    if (it) AppearanceConfig.setLightMode(false)
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+            )
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Layout Width
         val layoutWidth by AppearanceConfig.layoutWidth.collectAsState()
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Layout Width", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                Text("Restrict maximum content width on large monitors", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    listOf("Fluid" to "Edge-to-Edge", "Modern" to "Centered", "Compact" to "Narrow").forEach { (id, label) ->
-                        FilterChip(
-                            selected = layoutWidth == id,
-                            onClick = { AppearanceConfig.setLayoutWidth(id) },
-                            label = { Text(label) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White,
-                            ),
-                        )
-                    }
-                }
+        Text("Layout Width", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+        Text("Restrict maximum content width on large monitors", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            listOf("Fluid" to "Edge-to-Edge", "Modern" to "Centered", "Compact" to "Narrow").forEach { (id, label) ->
+                FilterChip(
+                    selected = layoutWidth == id,
+                    onClick = { AppearanceConfig.setLayoutWidth(id) },
+                    label = { Text(label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = Color.White,
+                    ),
+                )
             }
         }
 
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(modifier = Modifier.height(24.dp))
+
         // Search Bar Mode
         val searchBarMode by AppearanceConfig.searchBarMode.collectAsState()
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Search Bar Visibility", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                Text("Control how the search bar appears on the home screen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    listOf("Always Visible" to "Always Visible", "Auto-hide" to "Auto-hide").forEach { (id, label) ->
-                        FilterChip(
-                            selected = searchBarMode == id,
-                            onClick = { AppearanceConfig.setSearchBarMode(id) },
-                            label = { Text(label) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White,
-                            ),
-                        )
-                    }
-                }
+        Text("Search Bar Visibility", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+        Text("Control how the search bar appears on the home screen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            listOf("Always Visible" to "Always Visible", "Auto-hide" to "Auto-hide").forEach { (id, label) ->
+                FilterChip(
+                    selected = searchBarMode == id,
+                    onClick = { AppearanceConfig.setSearchBarMode(id) },
+                    label = { Text(label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = Color.White,
+                    ),
+                )
             }
         }
     }

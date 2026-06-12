@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.desktop.network.DohProvider
@@ -22,7 +23,7 @@ fun SettingsNetwork() {
     var statusMessage by remember { mutableStateOf("") }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

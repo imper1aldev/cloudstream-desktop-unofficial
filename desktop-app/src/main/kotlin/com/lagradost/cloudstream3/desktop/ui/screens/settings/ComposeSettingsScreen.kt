@@ -24,75 +24,68 @@ enum class SettingsTab(val title: String) {
 fun ComposeSettingsScreen(navController: NavController) {
     var selectedTab by remember { mutableStateOf(SettingsTab.PLAYER) }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 800.dp)
-                .fillMaxHeight()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            Text("Settings", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(24.dp))
-
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab.ordinal,
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.primary,
-                edgePadding = 0.dp,
-                divider = {},
-                indicator = { tabPositions ->
-                    if (selectedTab.ordinal < tabPositions.size) {
-                        TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTab.ordinal]),
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                },
+    Row(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 32.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        // Container to keep max width reasonable on ultra-wide screens
+        Row(modifier = Modifier.widthIn(max = 1200.dp).fillMaxSize()) {
+            
+            // Left Pane: Sidebar Navigation
+            Column(
+                modifier = Modifier
+                    .width(220.dp)
+                    .fillMaxHeight()
+                    .padding(end = 24.dp)
             ) {
+                Text(
+                    text = "Settings", 
+                    style = MaterialTheme.typography.headlineMedium, 
+                    color = MaterialTheme.colorScheme.onSurface, 
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 32.dp, start = 8.dp)
+                )
+                
                 SettingsTab.values().forEach { tab ->
-                    Tab(
-                        selected = selectedTab == tab,
+                    val isSelected = selectedTab == tab
+                    Surface(
                         onClick = { selectedTab = tab },
-                        text = {
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                tab.title,
-                                color = if (selectedTab == tab) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
+                                text = tab.title,
+                                color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                style = MaterialTheme.typography.bodyLarge
                             )
-                        },
-                    )
+                        }
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Box(modifier = Modifier.fillMaxSize()) {
-                androidx.compose.animation.AnimatedContent(
+            
+            // Vertical Divider
+            VerticalDivider(
+                modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
+            
+            // Right Pane: Content area
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(start = 32.dp)
+            ) {
+                androidx.compose.animation.Crossfade(
                     targetState = selectedTab,
-                    transitionSpec = {
-                        val duration = 250
-                        if (targetState.ordinal > initialState.ordinal) {
-                            androidx.compose.animation.slideInHorizontally(
-                                animationSpec = androidx.compose.animation.core.tween(duration),
-                                initialOffsetX = { it / 4 },
-                            ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(duration)) togetherWith
-                                androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = androidx.compose.animation.core.tween(duration),
-                                    targetOffsetX = { -it / 4 },
-                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(duration))
-                        } else {
-                            androidx.compose.animation.slideInHorizontally(
-                                animationSpec = androidx.compose.animation.core.tween(duration),
-                                initialOffsetX = { -it / 4 },
-                            ) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(duration)) togetherWith
-                                androidx.compose.animation.slideOutHorizontally(
-                                    animationSpec = androidx.compose.animation.core.tween(duration),
-                                    targetOffsetX = { it / 4 },
-                                ) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(duration))
-                        }
-                    },
-                    label = "settings_tab_transition",
+                    animationSpec = androidx.compose.animation.core.tween(200),
+                    label = "settings_crossfade"
                 ) { tab ->
                     when (tab) {
                         SettingsTab.PLAYER -> SettingsPlayer()

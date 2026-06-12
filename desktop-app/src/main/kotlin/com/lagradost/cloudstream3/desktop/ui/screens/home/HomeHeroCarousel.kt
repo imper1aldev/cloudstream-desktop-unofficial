@@ -29,6 +29,7 @@ import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.desktop.ui.components.DesktopUi
 import com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme
 import com.lagradost.cloudstream3.desktop.ui.screens.details.GlobalDetailsCache
@@ -108,32 +109,50 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
             }
             scope.launch(Dispatchers.IO) {
                 try {
-                    // Step 1: fetch raw details — same cache the details page uses so clicking
-                    // the hero card opens instantly with zero extra requests.
-                    val enriched = if (provider != null) {
-                        GlobalDetailsCache.fetchRaw(provider, item.url)
+                    // FAST PATH: Instant TMDB lookup using a dummy LoadResponse
+                    val dummyTitle = cleanHeroTitle(item.name)
+                    
+                    if (provider != null) {
+                        val dummy = provider.newMovieLoadResponse(
+                            name = dummyTitle,
+                            url = item.url,
+                            type = com.lagradost.cloudstream3.TvType.Movie,
+                            dataUrl = item.url,
+                        ) {
+                            this.posterUrl = item.posterUrl
+                        }
+                        
+                        // Pass a fake URL so enrich() doesn't overwrite the real cache with our empty dummy!
+                        GlobalDetailsCache.enrich(dummy, "dummy_${item.url}") { /* screenshots not needed here */ }
+                        
+                        // Pull enriched values into HeroMeta instantly!
+                        val backdropUrl = dummy.backgroundPosterUrl?.takeIf { it.isNotBlank() }
+                        val title = dummy.name.takeIf { it.isNotBlank() && it != dummyTitle } ?: cleanHeroTitle(item.name)
+                        val tags = dummy.tags?.take(4) ?: emptyList()
+                        val plot = dummy.plot?.take(200)
+                        val score = dummy.score?.toStringNull(0.5, 10)
+                        val year = dummy.year
+
+                        val meta = HeroMeta(title, backdropUrl, tags, plot, score, year)
+                        HeroCache.cache[cacheKey] = meta
+                        metaMap[item.url] = meta
                     } else {
-                        null
+                        // Fallback if no provider
+                        val meta = HeroMeta(dummyTitle, null, emptyList(), null, null, null)
+                        HeroCache.cache[cacheKey] = meta
+                        metaMap[item.url] = meta
                     }
 
-                    // Step 2: Run the full TMDB enrich pipeline (title, backdrop, genres, score…)
-                    // same high-quality path used by the details page, with append_to_response.
-                    if (enriched != null && provider != null) {
-                        GlobalDetailsCache.enrich(enriched, item.url) { /* screenshots not needed here */ }
+                    // SLOW PATH: Pre-cache the real details page for "instant click"
+                    // Delay slightly to prioritize UI/Image loading
+                    delay(1500)
+                    if (provider != null && !GlobalDetailsCache.cache.containsKey(item.url)) {
+                        try {
+                            GlobalDetailsCache.fetchRaw(provider, item.url)
+                        } catch (e: Exception) {
+                            // Ignore scrape failures in background pre-caching
+                        }
                     }
-
-                    // Step 3: Pull enriched values into HeroMeta.
-                    // Backdrop: prefer proper widescreen backdrop, never fall back to portrait poster.
-                    val backdropUrl = enriched?.backgroundPosterUrl?.takeIf { it.isNotBlank() }
-                    val title = enriched?.name?.takeIf { it.isNotBlank() } ?: cleanHeroTitle(item.name)
-                    val tags = enriched?.tags?.take(4) ?: emptyList()
-                    val plot = enriched?.plot?.take(200)
-                    val score = enriched?.score?.toStringNull(0.5, 10)
-                    val year = enriched?.year
-
-                    val meta = HeroMeta(title, backdropUrl, tags, plot, score, year)
-                    HeroCache.cache[cacheKey] = meta
-                    metaMap[item.url] = meta
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Throwable) {

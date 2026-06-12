@@ -33,6 +33,8 @@ cloudstream-windows-workspace/
 ├── plugin-runtime/              # Isolated ClassLoaders specifically for booting .cs3 Android plugins
 ├── plugin-sandbox/              # Testing environment for validating plugins against the Android stubs
 ├── desktop-app/                 # The main Kotlin/Compose Multiplatform desktop module
+│   ├── appResources/            # Native binaries bundled into the final MSI
+│   │   └── windows/mpv/         # Place libmpv-2.dll here for hardware-accelerated video
 │   ├── build.gradle.kts         # Gradle build script for the desktop app
 │   └── src/main/kotlin/com/lagradost/cloudstream3/desktop/
 │       ├── Main.kt              # Clean 70-line application bootstrapper
@@ -116,8 +118,13 @@ To build the final standalone Windows `.msi` installer (which bundles the JRE an
 ./gradlew desktop-app:packageMsi
 ```
 The compiled installer will be generated at `desktop-app/build/compose/binaries/main/msi/`.
-> [!NOTE]  
-> The Gradle script includes an automated `stripPlaywrightDriver` task. When you build the MSI, it will automatically unpack the `com.microsoft.playwright:driver-bundle` dependency, strip out the macOS and Linux Node.js binaries, and repackage it. This safely strips out redundant OS binaries without breaking Cloudflare bypassing on Windows, helping to keep the large bundled JVM + MPV installer as optimized as possible.
+
+### Linux Support (Experimental)
+The core architecture is fundamentally cross-platform. To build and run on Linux:
+1. Ensure `libmpv.so` is placed in `desktop-app/appResources/linux/mpv/` or installed system-wide.
+2. Run `./gradlew desktop-app:run` to launch locally.
+3. Package natively via `./gradlew desktop-app:packageDeb` (or `packageAppImage` / `packageRpm`).
+
 
 ## 🙏 Acknowledgements
 Significant acknowledgement is given to the original CloudStream developers and contributors. This project utilizes their core scraping engine and extension architecture as a foundation.
