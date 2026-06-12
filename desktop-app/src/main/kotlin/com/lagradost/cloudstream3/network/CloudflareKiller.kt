@@ -1,8 +1,8 @@
 package com.lagradost.cloudstream3.network
 
 import com.lagradost.cloudstream3.app
-import com.lagradost.nicehttp.Requests.Companion.await
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.nicehttp.Requests.Companion.await
 import kotlinx.coroutines.runBlocking
 import okhttp3.Headers
 import okhttp3.Interceptor
@@ -135,8 +135,7 @@ class CloudflareKiller : Interceptor {
     private suspend fun bypassCloudflare(request: Request): Response? {
         val url = request.url.toString()
         val host = request.url.host
-
-        AppLogger.i("$TAG: Loading Playwright to solve Cloudflare for $host")
+        AppLogger.i("$TAG: Loading Native Edge/Chrome to solve Cloudflare for $host")
 
         var solved = false
         val result = WebViewResolver(

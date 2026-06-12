@@ -1,29 +1,34 @@
 package android.os;
 
-@android.annotation.Stub
-public class Handler {
-    public Handler() {}
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
+@android.annotation.Implemented
+public class Handler {
+    private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+
+    public Handler() {}
     public Handler(Looper looper) {}
+    public Handler(Looper looper, Callback callback) {}
 
     public boolean post(Runnable r) {
-        try {
-            new Thread(r).start();
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
+        executor.execute(r);
+        return true;
     }
 
     public boolean postDelayed(Runnable r, long delayMillis) {
-        try {
-            new Thread(() -> {
-                try { Thread.sleep(delayMillis); } catch (InterruptedException ignored) {}
-                r.run();
-            }).start();
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
+        executor.schedule(r, delayMillis, TimeUnit.MILLISECONDS);
+        return true;
+    }
+
+    public void removeCallbacks(Runnable r) {
+        // Stub: Not easily supported with basic Executor
+    }
+
+    public void removeCallbacksAndMessages(Object token) {}
+
+    public interface Callback {
+        boolean handleMessage(Message msg);
     }
 }

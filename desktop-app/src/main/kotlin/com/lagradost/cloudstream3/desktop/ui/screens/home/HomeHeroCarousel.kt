@@ -3,7 +3,6 @@ package com.lagradost.cloudstream3.desktop.ui.screens.home
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -26,13 +25,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
-import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.ui.components.DesktopUi
 import com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme
-import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
+import com.lagradost.cloudstream3.desktop.ui.screens.details.GlobalDetailsCache
 import com.lagradost.cloudstream3.fixUrlNull
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopBookmark
@@ -41,8 +40,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 
 data class HeroMeta(
+    val title: String?,
     val backdropUrl: String?,
     val tags: List<String>,
     val plot: String?,
@@ -55,12 +56,10 @@ object HeroCache {
 }
 
 fun cleanHeroTitle(raw: String): String {
-    val coreTitle = raw.split(Regex("[\\(\\[\\{\\|]")).firstOrNull() ?: raw
-    val s = coreTitle
-        .replace(Regex("\\b(WEB-DL|HDTC|HDRip|BluRay|CAM|DVDSCR)\\b.*$", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("(?i)Anime Series$"), "")
-        .trim()
-    return s.ifBlank { raw }
+    return raw.replace(Regex("""\s*\(\d{4}\).*"""), "")
+        .replace(Regex("""\s*(?i)(dual audio|720p|1080p|480p|2160p|webrip|web-dl|hdtv|bluray).*"""), "")
+        .replace(Regex("""\s*[\[\{].*"""), "")
+        .split(Regex("[\\(\\[\\{\\|]")).firstOrNull()?.trim() ?: raw.trim()
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -69,9 +68,9 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
     if (items.isEmpty()) return
 
     val displayItems = items.take(10)
-    val MAX_PAGES = displayItems.size * 1000
-    val initialPage = MAX_PAGES / 2
-    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { MAX_PAGES })
+    val maxPages = displayItems.size * 1000
+    val initialPage = maxPages / 2
+    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { maxPages })
     val metaMap = remember { mutableStateMapOf<String, HeroMeta>() }
     val scope = rememberCoroutineScope()
 
@@ -80,8 +79,9 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
             delay(5000)
             if (!pagerState.isScrollInProgress) {
                 try {
+                    val next = if (pagerState.isScrollInProgress) pagerState.targetPage + 1 else pagerState.currentPage + 1
                     pagerState.animateScrollToPage(
-                        page = pagerState.currentPage + 1,
+                        page = next,
                         animationSpec = tween(durationMillis = 1200),
                     )
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -108,85 +108,30 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
             }
             scope.launch(Dispatchers.IO) {
                 try {
-                    var backdropUrl: String? = null
-                    var tags: List<String> = emptyList()
-                    var plot: String? = null
-                    var score: String? = null
-                    var year: Int? = null
-
-                    try {
-                        val enriched = provider?.load(item.url)
-                        if (enriched != null) {
-                            backdropUrl = enriched.backgroundPosterUrl
-                            tags = enriched.tags?.take(4) ?: emptyList()
-                            plot = enriched.plot?.take(200)
-                            score = enriched.score?.toStringNull(0.5, 10)
-                            year = enriched.year
-                        }
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        AppLogger.w("HomeScreen", "Error fetching native provider metadata for ${item.name}", e)
+                    // Step 1: fetch raw details — same cache the details page uses so clicking
+                    // the hero card opens instantly with zero extra requests.
+                    val enriched = if (provider != null) {
+                        GlobalDetailsCache.fetchRaw(provider, item.url)
+                    } else {
+                        null
                     }
 
-                    if (backdropUrl == null || tags.isEmpty() || score == null) {
-                        try {
-                            val tmdb = object : com.lagradost.cloudstream3.metaproviders.TmdbProvider() {
-                                override val useMetaLoadResponse = true
-                            }
-
-                            val cleanName = cleanHeroTitle(item.name)
-                            val results = tmdb.search(cleanName, 1)?.items ?: emptyList()
-                            val strippedCleanName = cleanName.replace(Regex("[^a-zA-Z0-9]"), "")
-
-                            val itemYear = when (item) {
-                                is com.lagradost.cloudstream3.MovieSearchResponse -> item.year
-                                is com.lagradost.cloudstream3.TvSeriesSearchResponse -> item.year
-                                else -> null
-                            }
-
-                            val match = results.firstOrNull { result ->
-                                val resultYear = when (result) {
-                                    is com.lagradost.cloudstream3.MovieSearchResponse -> result.year
-                                    is com.lagradost.cloudstream3.TvSeriesSearchResponse -> result.year
-                                    else -> null
-                                }
-                                val strippedResultName = result.name.replace(Regex("[^a-zA-Z0-9]"), "")
-
-                                if (strippedResultName.equals(strippedCleanName, ignoreCase = true) && strippedCleanName.isNotEmpty()) {
-                                    if (result is com.lagradost.cloudstream3.MovieSearchResponse && resultYear != null && itemYear != null && resultYear != itemYear) {
-                                        false // Year conflicts
-                                    } else {
-                                        true // Name matches and year doesn't conflict
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-
-                            if (match != null) {
-                                val tmdbEnriched = tmdb.load(match.url)
-                                if (tmdbEnriched != null) {
-                                    if (backdropUrl == null) {
-                                        backdropUrl = tmdbEnriched.backgroundPosterUrl?.replace("/w500/", "/original/")
-                                    } else {
-                                        backdropUrl = backdropUrl?.replace("/w500/", "/original/")
-                                    }
-
-                                    if (tags.isEmpty()) tags = tmdbEnriched.tags?.take(4) ?: emptyList()
-                                    if (plot == null) plot = tmdbEnriched.plot?.take(200)
-                                    if (score == null) score = tmdbEnriched.score?.toStringNull(0.5, 10)
-                                    if (year == null) year = tmdbEnriched.year
-                                }
-                            }
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: Throwable) {
-                            AppLogger.w("HomeScreen", "Error fetching TMDB enrichment for ${item.name}", e)
-                        }
+                    // Step 2: Run the full TMDB enrich pipeline (title, backdrop, genres, score…)
+                    // same high-quality path used by the details page, with append_to_response.
+                    if (enriched != null && provider != null) {
+                        GlobalDetailsCache.enrich(enriched, item.url) { /* screenshots not needed here */ }
                     }
 
-                    val meta = HeroMeta(backdropUrl, tags, plot, score, year)
+                    // Step 3: Pull enriched values into HeroMeta.
+                    // Backdrop: prefer proper widescreen backdrop, never fall back to portrait poster.
+                    val backdropUrl = enriched?.backgroundPosterUrl?.takeIf { it.isNotBlank() }
+                    val title = enriched?.name?.takeIf { it.isNotBlank() } ?: cleanHeroTitle(item.name)
+                    val tags = enriched?.tags?.take(4) ?: emptyList()
+                    val plot = enriched?.plot?.take(200)
+                    val score = enriched?.score?.toStringNull(0.5, 10)
+                    val year = enriched?.year
+
+                    val meta = HeroMeta(title, backdropUrl, tags, plot, score, year)
                     HeroCache.cache[cacheKey] = meta
                     metaMap[item.url] = meta
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -198,35 +143,25 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
         }
     }
 
-    // Always use a deep cinematic dark for the hero overlays — works in both light & dark mode
-    val heroFade = Color(0xFF0C0C16)
     // The actual surface color the content rows sit on (SurfaceCard via MaterialTheme.colorScheme.surface)
     val surfaceColor = LocalDesktopTheme.current.SurfaceCard
+    val heroFade = surfaceColor
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 9f)
-            .padding(bottom = 0.dp)
+            .height(550.dp) // Fixed height instead of aspect ratio so it doesn't get ridiculously tall on ultra-wides
+            .padding(top = 16.dp, bottom = 0.dp)
             .graphicsLayer { clip = false },
     ) {
-        // Bottom bleed gradient — transitions from cinematic dark into the actual page surface
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(100.dp)
-                .align(Alignment.BottomCenter)
-                .offset(y = 80.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to heroFade,
-                        0.5f to surfaceColor.copy(alpha = 0.85f),
-                        1.0f to surfaceColor,
-                    ),
-                ),
-        )
+        // External bottom bleed removed as it's unnecessary with distinct rounded coverflow cards
 
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 220.dp), // Massive padding for significant peeking effect
+            pageSpacing = 32.dp,
+        ) { page ->
             val realPage = page % displayItems.size
             val item = displayItems[realPage]
             val posterUrl = provider?.fixUrlNull(item.posterUrl)
@@ -238,9 +173,29 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                 label = "backdropFade",
             )
 
+            // Calculate scale and alpha for coverflow effect
+            val rawOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+            val pageOffset = rawOffset.absoluteValue
+
+            val cardScale = 1f - (pageOffset * 0.15f).coerceIn(0f, 0.15f)
+            val cardAlpha = 1f - (pageOffset * 0.3f).coerceIn(0f, 0.3f)
+
+            val density = androidx.compose.ui.platform.LocalDensity.current.density
+
             Box(
                 modifier = Modifier
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .zIndex(1f - pageOffset) // Center card gets the highest zIndex so it stacks on top
+                    .graphicsLayer {
+                        scaleX = cardScale
+                        scaleY = cardScale
+                        alpha = cardAlpha
+
+                        // Coverflow stacking logic:
+                        // Pull the side cards strongly towards the center so they slide underneath
+                        translationX = rawOffset * 150f * density
+                    }
+                    .clip(RoundedCornerShape(32.dp)), // Large rounded corners like the screenshot
             ) {
                 // Blurred portrait poster — immediate placeholder
                 if (posterUrl != null) {
@@ -257,31 +212,28 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                     AsyncImage(
                         model = meta.backdropUrl,
                         contentDescription = null,
-                        contentScale = ContentScale.FillWidth,
-                        modifier = Modifier.fillMaxWidth().alpha(backdropAlpha),
+                        contentScale = ContentScale.Crop, // Crop to fill the rounded card beautifully
+                        modifier = Modifier.fillMaxSize().alpha(backdropAlpha),
                     )
                 }
 
-                // Vertical gradient — always cinematic dark fade at bottom
+                // Vertical gradient — very subtle fade at the very bottom
                 Box(
                     modifier = Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
                             0.0f to Color.Transparent,
-                            0.42f to Color.Transparent,
-                            0.60f to heroFade.copy(alpha = 0.40f),
-                            0.75f to heroFade.copy(alpha = 0.82f),
-                            0.88f to heroFade.copy(alpha = 0.97f),
-                            1.0f to heroFade,
+                            0.80f to Color.Transparent,
+                            1.0f to heroFade.copy(alpha = 0.6f),
                         ),
                     ),
                 )
-                // Horizontal vignette — cinematic left-side darkening for text readability
+                // Horizontal vignette — minimal subtle darkening for text legibility
                 Box(
                     modifier = Modifier.fillMaxSize().background(
                         Brush.horizontalGradient(
-                            0.0f to heroFade.copy(alpha = 0.85f),
-                            0.15f to heroFade.copy(alpha = 0.60f),
-                            0.50f to Color.Transparent,
+                            0.0f to heroFade.copy(alpha = 0.4f),
+                            0.20f to heroFade.copy(alpha = 0.15f),
+                            0.40f to Color.Transparent,
                         ),
                     ),
                 )
@@ -290,28 +242,27 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 56.dp, end = 56.dp, bottom = 90.dp, top = 24.dp),
+                        .padding(start = 56.dp, end = 56.dp, bottom = 48.dp, top = 24.dp), // Adjusted padding for rounded card
                     verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.Start
+                    horizontalArrangement = Arrangement.Start,
                 ) {
-                    // Left Side: Clear Poster Image next to the text
                     if (posterUrl != null) {
                         AsyncImage(
                             model = posterUrl,
-                            contentDescription = "Poster",
+                            contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .width(220.dp)
+                                .width(160.dp)
                                 .aspectRatio(2f / 3f)
-                                .clip(RoundedCornerShape(16.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-                                .shadow(24.dp, RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                .shadow(16.dp, RoundedCornerShape(12.dp)),
                         )
-                        Spacer(modifier = Modifier.width(48.dp))
+                        Spacer(modifier = Modifier.width(32.dp))
                     }
 
                     Column(
-                        modifier = Modifier.fillMaxWidth(0.65f), // Take up remaining space comfortably
+                        modifier = Modifier.weight(1f), // Take up remaining space comfortably
                     ) {
                         // Content-type badge
                         item.type?.let { tvType ->
@@ -332,7 +283,7 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                             ) {
                                 Text(
                                     typeLabel,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.5.sp,
@@ -342,15 +293,18 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                         }
 
                         // Title
-                        Text(
-                            text = cleanHeroTitle(item.name),
-                            style = MaterialTheme.typography.displayMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            lineHeight = 48.sp,
-                        )
+                        val displayTitle = meta?.title ?: cleanHeroTitle(item.name)
+                        if (displayTitle.isNotBlank()) {
+                            Text(
+                                text = displayTitle,
+                                style = MaterialTheme.typography.displayMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 48.sp,
+                            )
+                        }
 
                         // Rating & Year
                         Spacer(Modifier.height(10.dp))
@@ -365,7 +319,7 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                                 Spacer(Modifier.width(6.dp))
                                 Text(
                                     text = meta.score,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
                                 )
@@ -374,7 +328,7 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                             if (meta?.year != null) {
                                 Text(
                                     text = meta.year.toString(),
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium,
                                 )
@@ -389,10 +343,10 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(20.dp))
-                                            .background(Color.White.copy(alpha = 0.15f))
+                                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
                                             .padding(horizontal = 12.dp, vertical = 6.dp),
                                     ) {
-                                        Text(tag, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(tag, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -403,7 +357,7 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                             Spacer(Modifier.height(16.dp))
                             Text(
                                 text = meta!!.plot!!,
-                                color = Color.White.copy(alpha = 0.9f),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
                                 fontSize = 14.sp,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
@@ -442,7 +396,7 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                                                 url = item.url,
                                                 apiName = provider.name,
                                                 posterUrl = item.posterUrl,
-                                            )
+                                            ),
                                         )
                                     }
                                     isBookmarked = !isBookmarked
@@ -450,13 +404,13 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                                 modifier = Modifier
                                     .size(48.dp)
                                     .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                                    .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape),
                             ) {
                                 Icon(
                                     imageVector = if (isBookmarked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = "Bookmark",
                                     tint = if (isBookmarked) Color.Red else Color.White,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(24.dp),
                                 )
                             }
                         }
@@ -469,8 +423,9 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
         IconButton(
             onClick = {
                 scope.launch {
+                    val next = if (pagerState.isScrollInProgress) pagerState.targetPage - 1 else pagerState.currentPage - 1
                     pagerState.animateScrollToPage(
-                        page = pagerState.currentPage - 1,
+                        page = next,
                         animationSpec = androidx.compose.animation.core.tween(durationMillis = 1000),
                     )
                 }
@@ -483,8 +438,9 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
         IconButton(
             onClick = {
                 scope.launch {
+                    val next = if (pagerState.isScrollInProgress) pagerState.targetPage + 1 else pagerState.currentPage + 1
                     pagerState.animateScrollToPage(
-                        page = pagerState.currentPage + 1,
+                        page = next,
                         animationSpec = androidx.compose.animation.core.tween(durationMillis = 1000),
                     )
                 }
@@ -518,4 +474,3 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
         }
     }
 }
-

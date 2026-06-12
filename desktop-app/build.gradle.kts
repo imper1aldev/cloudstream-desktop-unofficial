@@ -1,7 +1,3 @@
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
-
 plugins {
     kotlin("jvm")
     id("org.jetbrains.compose") version "1.7.3"
@@ -56,11 +52,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:$coroutinesVersion")
 
-    // Playwright (headless Chromium)
-    // Desktop counterpart of Android's WebView system.
-    implementation("com.microsoft.playwright:playwright:1.60.0")
-
-    // BouncyCastle & Conscrypt
+    // Desktop counterpart of Android's WebView system (now native CDP).
     // Android's built-in AES-GCM crypto is not available on desktop JVM.
     implementation("org.bouncycastle:bcprov-jdk18on:1.77")
     implementation("org.conscrypt:conscrypt-openjdk-uber:2.5.2")
@@ -70,7 +62,7 @@ dependencies {
 
     // Compose Desktop UI
     implementation(compose.desktop.currentOs)
-    implementation(compose.material3)  // material3 already includes core icons
+    implementation(compose.material3) // material3 already includes core icons
     implementation(compose.materialIconsExtended)
     implementation(compose.ui)
     implementation(compose.foundation)
@@ -83,54 +75,6 @@ dependencies {
     // Logging
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
-}
-
-// Strip Playwright driver-bundle to Windows-only before packaging
-// The driver-bundle JAR ships Node.js for ALL platforms (Win/Mac/Linux).
-// Since this is a Windows-only build, we strip out Mac and Linux entries
-// to reduce the JAR from ~206MB down to ~50MB.
-val stripPlaywrightDriver by tasks.registering {
-    description = "Strips non-Windows platform binaries from the Playwright driver-bundle JAR."
-    group = "build"
-
-    doLast {
-        val driverJar = configurations.runtimeClasspath.get()
-            .resolvedConfiguration.resolvedArtifacts
-            .find { it.name == "driver-bundle" }?.file ?: return@doLast
-
-        val strippedJar = layout.buildDirectory.get().asFile.resolve("playwright-driver-win32.jar")
-        if (strippedJar.exists() && strippedJar.lastModified() > driverJar.lastModified()) {
-            println("Playwright driver already stripped, skipping.")
-            return@doLast
-        }
-
-        println("Stripping non-Windows entries from Playwright driver-bundle (${driverJar.length() / 1024 / 1024}MB)...")
-
-        val platformsToStrip = listOf("driver/mac", "driver/mac-arm64", "driver/linux", "driver/linux-arm64")
-
-        ZipFile(driverJar).use { input: ZipFile ->
-            ZipOutputStream(strippedJar.outputStream().buffered()).use { output: ZipOutputStream ->
-                input.entries().asSequence()
-                    .filter { entry: ZipEntry ->
-                        platformsToStrip.none { entry.name.startsWith(it) }
-                    }
-                    .forEach { entry: ZipEntry ->
-                        output.putNextEntry(ZipEntry(entry.name))
-                        if (!entry.isDirectory) {
-                            input.getInputStream(entry).copyTo(output)
-                        }
-                        output.closeEntry()
-                    }
-            }
-        }
-
-        println("Stripped driver size: ${strippedJar.length() / 1024 / 1024}MB (was ${driverJar.length() / 1024 / 1024}MB)")
-
-        // Replace the original JAR in the Gradle cache with the stripped version
-        // so the packager picks up the smaller file
-        driverJar.delete()
-        strippedJar.copyTo(driverJar, overwrite = true)
-    }
 }
 
 // Compose Desktop application configuration
@@ -150,23 +94,16 @@ compose.desktop {
             packageVersion = "0.1.0"
             description = "CloudStream Desktop Client"
             vendor = "CloudStream"
-            includeAllModules = true  // Required — jlink cannot detect dynamically-loaded modules (JNA, Playwright, Conscrypt)
+            includeAllModules = true // Required — jlink cannot detect dynamically-loaded modules (JNA, Playwright, Conscrypt)
             appResourcesRootDir.set(project.layout.projectDirectory.dir("appResources"))
 
             windows {
                 iconFile.set(project.file("src/main/resources/logo_installer.ico"))
                 menuGroup = "CloudStream Desktop"
                 upgradeUuid = "d7e9b04f-723a-4467-84df-fcf470c1ae02"
-                shortcut = true       // Creates a Desktop shortcut during install
+                shortcut = true // Creates a Desktop shortcut during install
                 perUserInstall = true // Installs per-user, avoids needing admin rights
             }
         }
-    }
-
-    // Hook the strip task to run before any MSI packaging task
-    afterEvaluate {
-        listOf("packageMsi", "packageReleaseMsi", "createDistributable", "createReleaseDistributable")
-            .mapNotNull { tasks.findByName(it) }
-            .forEach { it.dependsOn(stripPlaywrightDriver) }
     }
 }

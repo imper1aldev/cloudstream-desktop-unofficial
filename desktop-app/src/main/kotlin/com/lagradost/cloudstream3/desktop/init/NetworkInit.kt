@@ -2,7 +2,6 @@ package com.lagradost.cloudstream3.desktop.init
 
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.network.NetworkConfig
-import com.lagradost.cloudstream3.desktop.network.PlaywrightResolverImpl
 import com.lagradost.cloudstream3.desktop.utils.appScope
 import com.lagradost.cloudstream3.mapper
 import com.lagradost.cloudstream3.network.WebViewResolver
@@ -47,19 +46,25 @@ fun initNetwork() {
 
                                 try {
                                     val clazz = type.rawClass
-                                    var instance: Any? = null
+                                    val unsafeField = sun.misc.Unsafe::class.java.getDeclaredField("theUnsafe")
+                                    unsafeField.isAccessible = true
+                                    val unsafe = unsafeField.get(null) as sun.misc.Unsafe
+                                    val instance = unsafe.allocateInstance(clazz)
 
-                                    val c = clazz.constructors.find { it.parameterCount == 2 } ?: clazz.constructors.firstOrNull()
-                                    if (c != null) {
-                                        instance = try {
-                                            c.newInstance(name, url)
-                                        } catch (e: Exception) {
-                                            try { c.newInstance(url, name) } catch (e2: Exception) { null }
+                                    var fieldsSet = 0
+                                    clazz.declaredFields.forEach { f ->
+                                        f.isAccessible = true
+                                        if (f.name == "name" || f.name.contains("name", ignoreCase = true)) {
+                                            f.set(instance, name)
+                                            fieldsSet++
+                                        } else if (f.name == "url" || f.name.contains("url", ignoreCase = true)) {
+                                            f.set(instance, url)
+                                            fieldsSet++
                                         }
                                     }
 
-                                    if (instance == null) {
-                                        AppLogger.e("FATAL: Could not instantiate VerifiedRepo via direct mapping!")
+                                    if (fieldsSet < 2) {
+                                        AppLogger.e("FATAL: Could not set all fields on VerifiedRepo via Unsafe!")
                                     }
                                     return instance
                                 } catch (e: Exception) {
@@ -78,10 +83,10 @@ fun initNetwork() {
 
     // Initialize WebViewResolver
     WebViewResolver.webViewHandler = { request, callback ->
-        PlaywrightResolverImpl.resolve(request, callback)
+        com.lagradost.cloudstream3.desktop.network.CdpResolverImpl.resolve(request, callback)
     }
 
-    // Bind the raw WebView stub to Playwright
+    // Bind the raw WebView stub to CDP
     android.webkit.WebView.loadUrlHandler = java.util.function.Consumer { url ->
         appScope.launch {
             WebViewResolver.webViewHandler?.invoke(

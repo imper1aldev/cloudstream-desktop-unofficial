@@ -1,8 +1,12 @@
 package com.lagradost.cloudstream3.desktop.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,10 +16,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.hoverable
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -119,7 +119,7 @@ fun PosterCard(
 
             val bookmarkAlpha by androidx.compose.animation.core.animateFloatAsState(
                 targetValue = if (isHovered || isBookmarked) 1f else 0f,
-                label = "bookmarkAlpha"
+                label = "bookmarkAlpha",
             )
 
             if (bookmarkAlpha > 0f) {
@@ -136,7 +136,7 @@ fun PosterCard(
                                     url = item.url,
                                     apiName = provider.name,
                                     posterUrl = item.posterUrl,
-                                )
+                                ),
                             )
                         }
                         isBookmarked = !isBookmarked
@@ -145,13 +145,13 @@ fun PosterCard(
                         .align(Alignment.TopEnd)
                         .padding(8.dp)
                         .graphicsLayer { alpha = bookmarkAlpha }
-                        .size(32.dp)
+                        .size(32.dp),
                 ) {
                     Icon(
                         imageVector = if (isBookmarked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "Bookmark",
                         tint = if (isBookmarked) Color.Red else Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -161,7 +161,7 @@ fun PosterCard(
                 visible = isHovered,
                 modifier = Modifier.align(Alignment.BottomCenter),
                 enter = androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.fadeOut()
+                exit = androidx.compose.animation.fadeOut(),
             ) {
                 Box(
                     modifier = Modifier

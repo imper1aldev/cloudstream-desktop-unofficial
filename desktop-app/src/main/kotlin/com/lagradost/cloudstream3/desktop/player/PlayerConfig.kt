@@ -11,10 +11,11 @@ object PlayerConfig {
     const val PREF_YTDL_FORMAT = "player_ytdl_format"
     const val PREF_AUTO_PLAY = "player_auto_play"
     const val PREF_AUTO_PLAY_TIMEOUT = "player_auto_play_timeout"
+    const val PREF_INTERPOLATION = "player_interpolation_enabled"
 
     fun applyMpvSettings(handle: Pointer, lib: MpvLibrary) {
-        // Hardware Acceleration (Default: auto-copy)
-        val hwdec = DesktopDataStore.getKey<String>(PREF_HWDEC) ?: "auto-copy"
+        // Hardware Acceleration (Default: auto-safe for VRAM rendering)
+        val hwdec = DesktopDataStore.getKey<String>(PREF_HWDEC) ?: "auto-safe"
         lib.mpv_set_option_string(handle, "hwdec", hwdec)
 
         // Subtitles Size (Default: 45)
@@ -41,6 +42,17 @@ object PlayerConfig {
         lib.mpv_set_option_string(handle, "cache", "yes")
         lib.mpv_set_option_string(handle, "demuxer-max-bytes", "150M") // Generous buffer
         lib.mpv_set_option_string(handle, "demuxer-max-back-bytes", "50M")
-        lib.mpv_set_option_string(handle, "cache-pause", "no") // Start playing IMMEDIATELY without waiting to fill the buffer
+        lib.mpv_set_option_string(handle, "cache-pause", "yes") // Allow MPV to pause to buffer, preventing video freeze with audio continuing
+
+        // Interpolation / Blending (Smooth motion for 24fps/30fps videos on high refresh rate displays)
+        val useInterpolation = DesktopDataStore.getKey<Boolean>(PREF_INTERPOLATION) ?: false
+        if (useInterpolation) {
+            lib.mpv_set_option_string(handle, "video-sync", "display-resample")
+            lib.mpv_set_option_string(handle, "interpolation", "yes")
+            lib.mpv_set_option_string(handle, "tscale", "oversample")
+        } else {
+            lib.mpv_set_option_string(handle, "video-sync", "audio")
+            lib.mpv_set_option_string(handle, "interpolation", "no")
+        }
     }
 }

@@ -16,8 +16,31 @@ import com.lagradost.cloudstream3.desktop.init.launchAutoUpdater
 import com.lagradost.cloudstream3.desktop.ui.CloudstreamApp
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
+import com.sun.jna.Native
+import com.sun.jna.Pointer
+import com.sun.jna.ptr.IntByReference
+import com.sun.jna.win32.StdCallLibrary
 import okio.Path.Companion.toOkioPath
 import java.io.File
+
+interface Dwmapi : StdCallLibrary {
+    fun DwmSetWindowAttribute(hwnd: Pointer, dwAttribute: Int, pvAttribute: IntByReference, cbAttribute: Int): Int
+}
+
+fun setDarkTitleBar(window: java.awt.Window) {
+    if (System.getProperty("os.name").lowercase().contains("win")) {
+        try {
+            val dwmapi = Native.load("dwmapi", Dwmapi::class.java)
+            val hwnd = Pointer(Native.getComponentID(window))
+            val trueValue = IntByReference(1)
+            // DWMWA_USE_IMMERSIVE_DARK_MODE is 20 for newer Win 10/11, 19 for older Win 10
+            dwmapi.DwmSetWindowAttribute(hwnd, 20, trueValue, 4)
+            dwmapi.DwmSetWindowAttribute(hwnd, 19, trueValue, 4)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
 
 /**
  * Single unified entry point for CloudStream Desktop Client.
@@ -32,6 +55,18 @@ import java.io.File
  *   7. Compose UI window
  */
 fun main() {
+    System.setProperty("compose.layers.type", "WINDOW") // Force Popups to be heavyweight native windows to render over MPV SwingPanel
+    System.setProperty("sun.awt.noerasebackground", "true") // Prevent AWT from flashing white background during aggressive window resizes
+
+    // Set default AWT/Swing backgrounds to BLACK so that when Popup OS windows are resized or created, they flash black instead of white!
+    val black = java.awt.Color.BLACK
+    javax.swing.UIManager.put("Panel.background", black)
+    javax.swing.UIManager.put("Window.background", black)
+    javax.swing.UIManager.put("RootPane.background", black)
+    javax.swing.UIManager.put("Dialog.background", black)
+    javax.swing.UIManager.put("Canvas.background", black)
+    javax.swing.UIManager.put("PopupMenu.background", black)
+
     AppLogger.i("Launching CloudStream Desktop Client...")
     AppLogger.i("Platform: ${PlatformPaths.currentOS}")
     AppLogger.i("App data directory: ${PlatformPaths.appDataDir.absolutePath}")
@@ -62,8 +97,8 @@ fun main() {
                         coil3.network.okhttp.OkHttpNetworkFetcherFactory(
                             callFactory = { request ->
                                 com.lagradost.cloudstream3.app.baseClient.newCall(request)
-                            }
-                        )
+                            },
+                        ),
                     )
                 }
                 .crossfade(true)
@@ -84,6 +119,9 @@ fun main() {
             state = state,
             icon = androidx.compose.ui.res.painterResource("logo_ui.png"),
         ) {
+            androidx.compose.runtime.LaunchedEffect(window) {
+                setDarkTitleBar(window)
+            }
             androidx.compose.runtime.CompositionLocalProvider(
                 com.lagradost.cloudstream3.desktop.ui.LocalWindowState provides state,
             ) {

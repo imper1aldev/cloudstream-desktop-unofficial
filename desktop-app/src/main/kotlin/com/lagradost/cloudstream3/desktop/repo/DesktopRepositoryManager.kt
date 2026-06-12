@@ -162,7 +162,7 @@ object DesktopRepositoryManager {
             try {
                 val nodes = mapper.readTree(body!!)
                 val urls = nodes.mapNotNull { it.get("url")?.asText() }
-                
+
                 val addedRepos = mutableListOf<Repository>()
                 for (url in urls) {
                     val repo = addSingleRepository(url)
@@ -293,7 +293,6 @@ object DesktopRepositoryManager {
         }
     }
 
-
     fun getExtensionsDir(): File = PlatformPaths.extensionsDir
 
     fun sha256(file: File): String {
@@ -415,20 +414,25 @@ object DesktopRepositoryManager {
     }
 
     suspend fun refreshAllRepositoryMetadata(): Int = withContext(Dispatchers.IO) {
-        var count = 0
-        for (saved in getSavedRepositories()) {
-            val manifest = fetchRepository(saved.url) ?: continue
-            saveRepository(
-                RepositoryData(
-                    iconUrl = manifest.iconUrl,
-                    name = manifest.name,
-                    url = saved.url,
-                ),
-            )
-            count++
-            AppLogger.i("Refreshed repo metadata: ${manifest.name}")
+        val count = java.util.concurrent.atomic.AtomicInteger(0)
+        coroutineScope {
+            getSavedRepositories().map { saved ->
+                async {
+                    val manifest = fetchRepository(saved.url) ?: return@async
+                    repoCache[saved.url] = manifest
+                    saveRepository(
+                        RepositoryData(
+                            iconUrl = manifest.iconUrl,
+                            name = manifest.name,
+                            url = saved.url,
+                        ),
+                    )
+                    count.incrementAndGet()
+                    AppLogger.i("Refreshed repo metadata: ${manifest.name}")
+                }
+            }.awaitAll()
         }
-        count
+        count.get()
     }
 
     suspend fun rebuildRemotePluginCatalog(): Int = withContext(Dispatchers.IO) {
@@ -492,14 +496,14 @@ object DesktopRepositoryManager {
 
                         if (remotePlugin.version > localVersion) {
                             AppLogger.i("Auto-Updater: Updating ${remotePlugin.name} from v$localVersion to v${remotePlugin.version}")
-                            
+
                             val iconUrl = remotePlugin.iconUrl ?: remotePluginIcons.value[remotePlugin.internalName] ?: saved.iconUrl
                             updatedList.add(
                                 com.lagradost.common.storage.PluginUpdateRecord(
                                     pluginName = remotePlugin.name,
                                     version = remotePlugin.version,
-                                    iconUrl = iconUrl
-                                )
+                                    iconUrl = iconUrl,
+                                ),
                             )
 
                             com.lagradost.runtime.loader.ExtensionLoader.unloadPlugin(localJar.absolutePath)

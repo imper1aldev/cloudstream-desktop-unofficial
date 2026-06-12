@@ -1,11 +1,8 @@
 package com.lagradost.cloudstream3.desktop.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.desktop.ui.components.DesktopUi
@@ -22,7 +19,7 @@ fun QualitySelector(availableQualities: List<String>, selectedQuality: String?, 
         Spacer(modifier = Modifier.height(6.dp))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChip(
                 selected = selectedQuality == null,

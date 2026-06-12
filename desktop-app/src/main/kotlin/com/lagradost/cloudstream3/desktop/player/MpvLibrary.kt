@@ -10,6 +10,7 @@ interface MpvLibrary : Library {
     fun mpv_initialize(handle: Pointer): Int
     fun mpv_set_option_string(ctx: Pointer, name: String, data: String): Int
     fun mpv_get_property_string(ctx: Pointer, name: String): String?
+    fun mpv_set_property_string(ctx: Pointer, name: String, data: String): Int
     fun mpv_command_string(ctx: Pointer, args: String): Int
     fun mpv_terminate_destroy(handle: Pointer)
 

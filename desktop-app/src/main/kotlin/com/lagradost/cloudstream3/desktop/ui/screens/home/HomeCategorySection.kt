@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
@@ -23,7 +22,6 @@ import com.lagradost.cloudstream3.desktop.ui.components.CategoryRowWithHeader
 import com.lagradost.cloudstream3.desktop.ui.components.PosterCard
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -81,6 +79,13 @@ fun HomeCategorySection(
         }
     }
 
+    val layoutWidthSetting by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.layoutWidth.collectAsState()
+    val maxWidthConstraint = when (layoutWidthSetting) {
+        "Compact" -> 1000.dp
+        "Modern" -> 1400.dp
+        else -> androidx.compose.ui.unit.Dp.Unspecified
+    }
+
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(300),
@@ -110,36 +115,50 @@ fun HomeCategorySection(
                         provider = provider,
                         onItemClick = { item, backdrop -> onItemClick(provider, item, backdrop) },
                     )
-                    afterHeroContent()
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.widthIn(max = maxWidthConstraint)) {
+                            afterHeroContent()
+                        }
+                    }
                 } else {
                     val titleStr = section.name.takeIf { it.isNotBlank() } ?: pageData.name
                     val showLargeHeader = sectionIndex == 0 && !isFirstPage && !titleStr.equals(pageData.name, ignoreCase = true)
-                    
-                    if (showLargeHeader) {
-                        Text(
-                            text = pageData.name,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 0.dp),
-                        )
-                    }
 
-                    val isLoop = section.list.size >= 4
-                    CategoryRowWithHeader(
-                        title = titleStr,
-                        itemCount = section.list.size,
-                        isInfinite = isLoop,
-                        onViewAll = { onViewAll(provider, section.name, section.list) },
-                    ) {
-                        items(if (isLoop) Int.MAX_VALUE else section.list.size) { index ->
-                            val itemIndex = if (isLoop) index % section.list.size else index
-                            val posterItem = section.list[itemIndex]
-                            PosterCard(
-                                item = posterItem,
-                                provider = provider,
-                                onClick = { onItemClick(provider, posterItem, null) },
-                            )
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(modifier = Modifier.widthIn(max = maxWidthConstraint)) {
+                            if (showLargeHeader) {
+                                Text(
+                                    text = pageData.name,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 0.dp),
+                                )
+                            }
+
+                            val isLoop = section.list.size >= 4
+                            CategoryRowWithHeader(
+                                title = titleStr,
+                                itemCount = section.list.size,
+                                isInfinite = isLoop,
+                                onViewAll = { onViewAll(provider, section.name, section.list) },
+                            ) {
+                                items(
+                                    count = if (isLoop) Int.MAX_VALUE else section.list.size,
+                                    key = { index ->
+                                        val itemIndex = if (isLoop) index % section.list.size else index
+                                        "${section.list[itemIndex].url}_$index"
+                                    },
+                                ) { index ->
+                                    val itemIndex = if (isLoop) index % section.list.size else index
+                                    val posterItem = section.list[itemIndex]
+                                    PosterCard(
+                                        item = posterItem,
+                                        provider = provider,
+                                        onClick = { onItemClick(provider, posterItem, null) },
+                                    )
+                                }
+                            }
                         }
                     }
                 }

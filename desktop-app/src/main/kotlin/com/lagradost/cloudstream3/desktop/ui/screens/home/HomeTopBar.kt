@@ -12,16 +12,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.ui.window.Popup
-import java.text.SimpleDateFormat
-import java.util.Date
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.desktop.ui.DesktopUiState
 import com.lagradost.cloudstream3.desktop.ui.components.DesktopUi
 // Haze removed for performance
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,12 +42,21 @@ fun HomeTopBar(
     selectedProvider: MainAPI?,
     onProviderSelected: (String) -> Unit,
     mergedPluginIcons: Map<String, String>,
-    hasUnreadUpdates: Boolean,
-    updatesHistory: List<com.lagradost.common.storage.PluginUpdateRecord>,
-    onMarkUpdatesRead: () -> Unit,
 ) {
     var isProviderDropdownExpanded by remember { mutableStateOf(false) }
-    var isUpdatesDialogExpanded by remember { mutableStateOf(false) }
+
+    val focusRequester = remember { FocusRequester() }
+    val searchTrigger by DesktopUiState.searchFocusTrigger.collectAsState()
+
+    LaunchedEffect(searchTrigger) {
+        if (searchTrigger > 0) {
+            try {
+                focusRequester.requestFocus()
+            } catch (e: Exception) {
+                // Ignore focus errors if not attached yet
+            }
+        }
+    }
 
     fun fuzzyMatchIcon(providerName: String): String? {
         val pName = providerName.lowercase().replace(Regex("[^a-z0-9]"), "").replace("provider", "").replace("plugin", "")
@@ -88,7 +96,7 @@ fun HomeTopBar(
                             singleLine = true,
                             textStyle = TextStyle(color = DesktopUi.TextPrimary, fontSize = 15.sp),
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(DesktopUi.TextPrimary),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).focusRequester(focusRequester),
                             keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = onSearch),
                             decorationBox = { innerTextField ->
@@ -306,104 +314,5 @@ fun HomeTopBar(
                 }
             }
         }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 32.dp)
-        ) {
-            IconButton(
-                onClick = {
-                    isUpdatesDialogExpanded = true
-                    if (hasUnreadUpdates) {
-                        onMarkUpdatesRead()
-                    }
-                },
-                modifier = Modifier
-                    .size(52.dp)
-                    .background(DesktopUi.SurfaceElevated.copy(alpha = 0.85f), CircleShape)
-                    .clip(CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Notifications,
-                    contentDescription = "Updates",
-                    tint = if (hasUnreadUpdates) DesktopUi.Accent else DesktopUi.TextPrimary
-                )
-                if (hasUnreadUpdates) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(8.dp)
-                            .background(Color.Red, CircleShape)
-                    )
-                }
-            }
-
-            if (isUpdatesDialogExpanded) {
-                Popup(
-                    alignment = Alignment.TopEnd,
-                    offset = androidx.compose.ui.unit.IntOffset(0, 160),
-                    onDismissRequest = { isUpdatesDialogExpanded = false }
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = DesktopUi.SurfaceElevated.copy(alpha = 0.95f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
-                        modifier = Modifier.width(360.dp).heightIn(max = 500.dp),
-                        shadowElevation = 8.dp
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-                            Text(
-                                "Plugin Updates",
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            if (updatesHistory.isEmpty()) {
-                                Text(
-                                    "No plugin updates recorded recently.",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 14.sp
-                                )
-                            } else {
-                                androidx.compose.foundation.lazy.LazyColumn(
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    items(updatesHistory.size) { i ->
-                                        val update = updatesHistory[i]
-                                        val timeString = SimpleDateFormat("MMM dd, HH:mm").format(Date(update.timestamp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            AsyncImage(
-                                                model = update.iconUrl,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color.White)
-                                            )
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(
-                                                    update.pluginName,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize = 14.sp
-                                                )
-                                                Text(
-                                                    "Updated to v${update.version} • $timeString",
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    fontSize = 12.sp
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
-

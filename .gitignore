@@ -27,7 +27,6 @@ desktop-app/appResources/
 *.so
 *.dylib
 ms-playwright/
-playwright/
 
 # OS
 .DS_Store
@@ -48,3 +47,12 @@ test_*.kt
 test_*.kts
 test-repos/
 .gemini/
+
+# Generated Logs
+spotless_*.log
+spotless_*.txt
+*.bak
+*.tmp
+*.orig
+.env
+secrets.properties

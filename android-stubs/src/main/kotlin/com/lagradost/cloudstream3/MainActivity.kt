@@ -6,6 +6,6 @@ package com.lagradost.cloudstream3
  */
 class MainActivity {
     companion object {
-        // Provide no-op or stubbed properties as needed by plugins.
+        val afterPluginsLoadedEvent = com.lagradost.cloudstream3.utils.Event<Boolean>()
     }
 }

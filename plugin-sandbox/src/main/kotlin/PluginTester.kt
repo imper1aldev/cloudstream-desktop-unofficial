@@ -86,7 +86,11 @@ fun main(args: Array<String>) {
                                             instance = try {
                                                 c.newInstance(name, url)
                                             } catch (e: Exception) {
-                                                try { c.newInstance(url, name) } catch (e2: Exception) { null }
+                                                try {
+                                                    c.newInstance(url, name)
+                                                } catch (e2: Exception) {
+                                                    null
+                                                }
                                             }
                                         }
                                         if (instance == null) {
@@ -108,7 +112,7 @@ fun main(args: Array<String>) {
 
         // Initialize WebViewResolver
         com.lagradost.cloudstream3.network.WebViewResolver.webViewHandler = { request, callback ->
-            com.lagradost.cloudstream3.desktop.network.PlaywrightResolverImpl.resolve(request, callback)
+            com.lagradost.cloudstream3.desktop.network.CdpResolverImpl.resolve(request, callback)
         }
 
         try {

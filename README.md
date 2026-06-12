@@ -66,6 +66,14 @@ To safely execute third-party Dalvik bytecode, the `plugin-runtime` converts `.c
 #### 4. Embedded Hardware-Accelerated Video Playback (`:player-abstraction`)
 Video playback is handled via an Embedded MPV Engine. The `:player-abstraction` module uses JNA (Java Native Access) to dynamically link into `libmpv-2.dll`, rendering hardware-accelerated video directly into a Compose `SwingPanel`.
 
+### ⌨️ Player Keyboard Shortcuts
+The embedded player supports the following keyboard shortcuts during playback:
+- **`Space`**: Toggle Play / Pause
+- **`Left Arrow` / `Right Arrow`**: Seek backwards / forwards by 10 seconds
+- **`Up Arrow` / `Down Arrow`**: Increase / Decrease volume by 5%
+- **`M`**: Toggle Mute
+- **`F` / `F11`**: Toggle Fullscreen
+
 ## 🚀 Setup & Installation
 
 ### For End Users

@@ -9,12 +9,14 @@ object AppearanceConfig {
     private const val PREF_LIGHT_MODE = "pref_light_mode"
     private const val PREF_GRID_SCALE = "pref_grid_scale"
     private const val PREF_LAYOUT_WIDTH = "pref_layout_width"
+    private const val PREF_SEARCH_BAR_MODE = "pref_search_bar_mode"
 
     val themeAccent = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_THEME_ACCENT) ?: "Purple")
     val amoledMode = MutableStateFlow(DesktopDataStore.getKey<Boolean>(PREF_AMOLED_MODE) ?: false)
     val isLightMode = MutableStateFlow(DesktopDataStore.getKey<Boolean>(PREF_LIGHT_MODE) ?: false)
     val gridScale = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_GRID_SCALE) ?: "Normal")
     val layoutWidth = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_LAYOUT_WIDTH) ?: "Modern")
+    val searchBarMode = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_SEARCH_BAR_MODE) ?: "Always Visible")
 
     fun setThemeAccent(colorName: String) {
         themeAccent.value = colorName
@@ -39,5 +41,10 @@ object AppearanceConfig {
     fun setLayoutWidth(width: String) {
         layoutWidth.value = width
         DesktopDataStore.setKey(PREF_LAYOUT_WIDTH, width)
+    }
+
+    fun setSearchBarMode(mode: String) {
+        searchBarMode.value = mode
+        DesktopDataStore.setKey(PREF_SEARCH_BAR_MODE, mode)
     }
 }

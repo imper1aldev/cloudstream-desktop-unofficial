@@ -78,7 +78,10 @@ fun SettingsAppearance() {
                 }
                 Switch(
                     checked = isLightMode,
-                    onCheckedChange = { AppearanceConfig.setLightMode(it) },
+                    onCheckedChange = {
+                        AppearanceConfig.setLightMode(it)
+                        if (it) AppearanceConfig.setAmoledMode(false)
+                    },
                     colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                 )
             }
@@ -100,18 +103,20 @@ fun SettingsAppearance() {
                 }
                 Switch(
                     checked = amoledMode,
-                    onCheckedChange = { AppearanceConfig.setAmoledMode(it) },
+                    onCheckedChange = {
+                        AppearanceConfig.setAmoledMode(it)
+                        if (it) AppearanceConfig.setLightMode(false)
+                    },
                     colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                 )
             }
         }
 
-
         // Layout Width
         val layoutWidth by AppearanceConfig.layoutWidth.collectAsState()
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Layout Width", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
@@ -132,6 +137,31 @@ fun SettingsAppearance() {
                 }
             }
         }
+
+        // Search Bar Mode
+        val searchBarMode by AppearanceConfig.searchBarMode.collectAsState()
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Search Bar Visibility", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                Text("Control how the search bar appears on the home screen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    listOf("Always Visible" to "Always Visible", "Auto-hide" to "Auto-hide").forEach { (id, label) ->
+                        FilterChip(
+                            selected = searchBarMode == id,
+                            onClick = { AppearanceConfig.setSearchBarMode(id) },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
-
