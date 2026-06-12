@@ -100,8 +100,8 @@ cd cloudstream-windows
 
 **3. The Video Engine Configuration:**
 Since GitHub blocks files larger than 100MB, the `libmpv-2.dll` is not checked into this repository. You must provide it yourself.
-- Download the Windows MPV binaries (ensure it includes `libmpv-2.dll`).
-- Place the core `libmpv-2.dll` directly inside the `desktop-app/appResources/windows/mpv/` directory of the project workspace.
+- Download the latest `mpv-dev` Windows build from [SourceForge's mpv-player-windows project](https://sourceforge.net/projects/mpv-player-windows/files/libmpv/) (make sure you download a `libmpv` or `dev` archive, not just the standard executable, as it must contain `libmpv-2.dll`).
+- Extract the archive and place the core `libmpv-2.dll` file directly inside the `desktop-app/appResources/windows/mpv/` directory of your project workspace.
 
 **4. Building for Local Testing:**
 To compile and launch the application locally for testing and development, run the following Gradle task in your terminal:
