@@ -42,6 +42,7 @@ fun HomeTopBar(
     selectedProvider: MainAPI?,
     onProviderSelected: (String) -> Unit,
     mergedPluginIcons: Map<String, String>,
+    onProviderSelectClick: (() -> Unit)? = null,
 ) {
     var isProviderDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -147,9 +148,16 @@ fun HomeTopBar(
 
             Spacer(modifier = Modifier.width(16.dp))
 
+            // Provider Selector Button
             Box {
                 Surface(
-                    onClick = { isProviderDropdownExpanded = true },
+                    onClick = {
+                        if (onProviderSelectClick != null) {
+                            onProviderSelectClick()
+                        } else {
+                            isProviderDropdownExpanded = true
+                        }
+                    },
                     shape = CircleShape,
                     color = DesktopUi.SurfaceElevated.copy(alpha = 0.85f),
                     border = BorderStroke(1.dp, DesktopUi.Accent.copy(alpha = 0.5f)),
@@ -177,169 +185,190 @@ fun HomeTopBar(
                     }
                 }
 
-                if (isProviderDropdownExpanded) {
-                    androidx.compose.ui.window.Popup(
-                        alignment = Alignment.TopCenter,
-                        onDismissRequest = { isProviderDropdownExpanded = false },
-                        properties = androidx.compose.ui.window.PopupProperties(focusable = true)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = DesktopUi.SurfaceElevated,
-                            border = BorderStroke(1.dp, DesktopUi.Accent.copy(alpha = 0.5f)),
-                            shadowElevation = 16.dp,
-                            modifier = Modifier.padding(top = 100.dp).width(520.dp).heightIn(max = 600.dp),
+            }
+        }
+    }
+}
+
+@Composable
+fun ProviderSelectionOverlay(
+    providers: List<MainAPI>,
+    selectedProvider: MainAPI?,
+    onProviderSelected: (String) -> Unit,
+    mergedPluginIcons: Map<String, String>,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = DesktopUi.SurfaceElevated,
+            border = BorderStroke(1.dp, DesktopUi.Accent.copy(alpha = 0.5f)),
+            shadowElevation = 16.dp,
+            modifier = Modifier
+                .width(520.dp)
+                .heightIn(max = 600.dp)
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = {} // Consume clicks inside the dialog
+                ),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                Text(
+                    "Select Provider",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp),
+                )
+
+                if (providers.isEmpty()) {
+                    Text("No providers installed", color = MaterialTheme.colorScheme.onSurface)
+                } else {
+                    var selectedCategory by remember { mutableStateOf("All") }
+                    val categories = remember(providers) {
+                        val allTypes = providers.flatMap { it.supportedTypes }.toSet()
+                        val cats = mutableListOf("All")
+                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.Movie) || allTypes.contains(com.lagradost.cloudstream3.TvType.TvSeries)) cats.add("Movies")
+                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.Anime) || allTypes.contains(com.lagradost.cloudstream3.TvType.AnimeMovie) || allTypes.contains(com.lagradost.cloudstream3.TvType.OVA)) cats.add("Anime")
+                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.Cartoon)) cats.add("Cartoon")
+                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.AsianDrama)) cats.add("Asian Drama")
+                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.NSFW)) cats.add("NSFW")
+                        cats
+                    }
+
+                    if (categories.size > 1) {
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
-                                Text(
-                                    "Select Provider",
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(bottom = 16.dp),
-                                )
-
-                                if (providers.isEmpty()) {
-                                    Text("No providers installed", color = MaterialTheme.colorScheme.onSurface)
-                                } else {
-                                    var selectedCategory by remember { mutableStateOf("All") }
-                                    val categories = remember(providers) {
-                                        val allTypes = providers.flatMap { it.supportedTypes }.toSet()
-                                        val cats = mutableListOf("All")
-                                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.Movie) || allTypes.contains(com.lagradost.cloudstream3.TvType.TvSeries)) cats.add("Movies")
-                                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.Anime) || allTypes.contains(com.lagradost.cloudstream3.TvType.AnimeMovie) || allTypes.contains(com.lagradost.cloudstream3.TvType.OVA)) cats.add("Anime")
-                                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.Cartoon)) cats.add("Cartoon")
-                                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.AsianDrama)) cats.add("Asian Drama")
-                                        if (allTypes.contains(com.lagradost.cloudstream3.TvType.NSFW)) cats.add("NSFW")
-                                        cats
-                                    }
-
-                                    if (categories.size > 1) {
-                                        @OptIn(ExperimentalLayoutApi::class)
-                                        FlowRow(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(bottom = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            categories.forEach { cat ->
-                                                val isSelected = selectedCategory == cat
-                                                Surface(
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    color = if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent,
-                                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                                                    modifier = Modifier.clickable { selectedCategory = cat },
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                                    ) {
-                                                        if (isSelected) {
-                                                            Icon(
-                                                                Icons.Default.Check,
-                                                                contentDescription = null,
-                                                                tint = MaterialTheme.colorScheme.onSurface,
-                                                                modifier = Modifier.size(16.dp),
-                                                            )
-                                                            Spacer(Modifier.width(6.dp))
-                                                        }
-                                                        Text(
-                                                            text = cat,
-                                                            color = MaterialTheme.colorScheme.onSurface,
-                                                            style = MaterialTheme.typography.labelMedium,
-                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                                    }
-
-                                    val filteredProviders = providers.filter { p ->
-                                        if (selectedCategory == "All") return@filter true
-                                        val types = p.supportedTypes
-                                        when (selectedCategory) {
-                                            "Movies" -> types.contains(com.lagradost.cloudstream3.TvType.Movie) || types.contains(com.lagradost.cloudstream3.TvType.TvSeries)
-                                            "Anime" -> types.contains(com.lagradost.cloudstream3.TvType.Anime) || types.contains(com.lagradost.cloudstream3.TvType.AnimeMovie) || types.contains(com.lagradost.cloudstream3.TvType.OVA)
-                                            "Cartoon" -> types.contains(com.lagradost.cloudstream3.TvType.Cartoon)
-                                            "Asian Drama" -> types.contains(com.lagradost.cloudstream3.TvType.AsianDrama)
-                                            "NSFW" -> types.contains(com.lagradost.cloudstream3.TvType.NSFW)
-                                            else -> true
-                                        }
-                                    }
-
-                                    androidx.compose.foundation.lazy.LazyColumn(
-                                        modifier = Modifier
-                                            .weight(1f, fill = false)
-                                            .fillMaxWidth(),
-                                    ) {
-                                        items(filteredProviders.size) { index ->
-                                            val provider = filteredProviders[index]
-                                            val iconUrl = mergedPluginIcons[provider.name] ?: fuzzyMatchIcon(provider.name)
-                                            val isProviderSelected = provider.name == selectedProvider?.name
-
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        onProviderSelected(provider.name)
-                                                        isProviderDropdownExpanded = false
-                                                    }
-                                                    .padding(vertical = 12.dp),
-                                            ) {
-                                                RadioButton(
-                                                    selected = isProviderSelected,
-                                                    onClick = null,
-                                                    colors = RadioButtonDefaults.colors(
-                                                        selectedColor = DesktopUi.Accent,
-                                                        unselectedColor = Color.White.copy(alpha = 0.5f),
-                                                    ),
-                                                    modifier = Modifier.padding(end = 12.dp).size(20.dp),
-                                                )
-
-                                                if (iconUrl != null) {
-                                                    AsyncImage(
-                                                        model = iconUrl,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.White),
-                                                    )
-                                                    Spacer(modifier = Modifier.width(12.dp))
-                                                }
-
-                                                Text(
-                                                    provider.name,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    fontSize = 16.sp,
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (filteredProviders.isEmpty()) {
-                                        Text(
-                                            text = "No providers in this category",
-                                            modifier = Modifier.padding(16.dp),
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    }
-                                }
-
-                                Row(
-                                    horizontalArrangement = Arrangement.End,
-                                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                            categories.forEach { cat ->
+                                val isSelected = selectedCategory == cat
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                                    modifier = Modifier.clickable { selectedCategory = cat },
                                 ) {
-                                    TextButton(onClick = { isProviderDropdownExpanded = false }) {
-                                        Text("Close", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                        }
+                                        Text(
+                                            text = cat,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        )
                                     }
                                 }
                             }
                         }
+                        HorizontalDivider(modifier = Modifier.padding(bottom = 8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    }
+
+                    val filteredProviders = providers.filter { p ->
+                        if (selectedCategory == "All") return@filter true
+                        val types = p.supportedTypes
+                        when (selectedCategory) {
+                            "Movies" -> types.contains(com.lagradost.cloudstream3.TvType.Movie) || types.contains(com.lagradost.cloudstream3.TvType.TvSeries)
+                            "Anime" -> types.contains(com.lagradost.cloudstream3.TvType.Anime) || types.contains(com.lagradost.cloudstream3.TvType.AnimeMovie) || types.contains(com.lagradost.cloudstream3.TvType.OVA)
+                            "Cartoon" -> types.contains(com.lagradost.cloudstream3.TvType.Cartoon)
+                            "Asian Drama" -> types.contains(com.lagradost.cloudstream3.TvType.AsianDrama)
+                            "NSFW" -> types.contains(com.lagradost.cloudstream3.TvType.NSFW)
+                            else -> true
+                        }
+                    }
+
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .fillMaxWidth(),
+                    ) {
+                        items(filteredProviders.size) { index ->
+                            val provider = filteredProviders[index]
+                            val iconUrl = mergedPluginIcons[provider.name] // Fix: Use correct fuzzy match if needed, but passing mergedPluginIcons is enough
+                            val isProviderSelected = provider.name == selectedProvider?.name
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onProviderSelected(provider.name)
+                                        onDismiss()
+                                    }
+                                    .padding(vertical = 12.dp),
+                            ) {
+                                RadioButton(
+                                    selected = isProviderSelected,
+                                    onClick = null,
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = DesktopUi.Accent,
+                                        unselectedColor = Color.White.copy(alpha = 0.5f),
+                                    ),
+                                    modifier = Modifier.padding(end = 12.dp).size(20.dp),
+                                )
+
+                                if (iconUrl != null) {
+                                    AsyncImage(
+                                        model = iconUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.White),
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                }
+
+                                Text(
+                                    provider.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 16.sp,
+                                )
+                            }
+                        }
+                    }
+
+                    if (filteredProviders.isEmpty()) {
+                        Text(
+                            text = "No providers in this category",
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Close", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     }
                 }
             }

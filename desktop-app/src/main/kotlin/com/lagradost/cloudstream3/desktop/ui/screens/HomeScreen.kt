@@ -41,6 +41,8 @@ fun ComposeHomeScreen(
         .map { DesktopDataStore.getUpdatesHistory() }
         .collectAsState(initial = DesktopDataStore.getUpdatesHistory())
 
+    var isProviderDropdownExpanded by remember { mutableStateOf(false) }
+
     LaunchedEffect(historyList) {
         val topHistory = historyList.take(3)
         for (history in topHistory) {
@@ -209,6 +211,7 @@ fun ComposeHomeScreen(
                             viewModel.searchResultsGrouped.value = null
                         },
                         mergedPluginIcons = mergedPluginIcons,
+                        onProviderSelectClick = { isProviderDropdownExpanded = true }
                     )
                 }
             }
@@ -228,6 +231,7 @@ fun ComposeHomeScreen(
                     viewModel.searchResultsGrouped.value = null
                 },
                 mergedPluginIcons = mergedPluginIcons,
+                onProviderSelectClick = { isProviderDropdownExpanded = true }
             )
         }
     }
@@ -246,7 +250,22 @@ fun ComposeHomeScreen(
                     viewModel.searchResultsGrouped.value = null
                 },
                 mergedPluginIcons = mergedPluginIcons,
+                onProviderSelectClick = { isProviderDropdownExpanded = true }
             )
         }
+    }
+
+    if (isProviderDropdownExpanded) {
+        ProviderSelectionOverlay(
+            providers = providers,
+            selectedProvider = selectedProvider,
+            onProviderSelected = {
+                viewModel.selectedProviderName.value = it
+                viewModel.searchResultsGrouped.value = null
+                isProviderDropdownExpanded = false
+            },
+            mergedPluginIcons = mergedPluginIcons,
+            onDismiss = { isProviderDropdownExpanded = false }
+        )
     }
 }
