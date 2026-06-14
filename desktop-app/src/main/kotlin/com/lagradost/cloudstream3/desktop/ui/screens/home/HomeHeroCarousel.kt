@@ -57,10 +57,24 @@ object HeroCache {
 }
 
 fun cleanHeroTitle(raw: String): String {
-    return raw.replace(Regex("""\s*\(\d{4}\).*"""), "")
-        .replace(Regex("""\s*(?i)(dual audio|720p|1080p|480p|2160p|webrip|web-dl|hdtv|bluray).*"""), "")
-        .replace(Regex("""\s*[\[\{].*"""), "")
-        .split(Regex("[\\(\\[\\{\\|]")).firstOrNull()?.trim() ?: raw.trim()
+    var cleaned = raw
+    
+    // 1. Strip trailing year and anything after: "Ragnarok (2020) 1080p" -> "Ragnarok"
+    cleaned = cleaned.replace(Regex("""\s*\(\d{4}\).*"""), "")
+    
+    // 2. Strip bracketed content anywhere: "[Dub] Ragnarok [1080p]" -> " Ragnarok "
+    cleaned = cleaned.replace(Regex("""\[.*?\]|\(.*?\)|\{.*?\}"""), " ")
+    
+    // 3. Strip common quality words
+    cleaned = cleaned.replace(Regex("""(?i)\b(dual audio|720p|1080p|480p|2160p|webrip|web-dl|hdtv|bluray)\b.*"""), "")
+    
+    // 4. Remove extra spaces
+    cleaned = cleaned.replace(Regex("""\s+"""), " ").trim()
+    
+    // 5. Safely split by | and take the first valid part (e.g., "Ragnarok | HD")
+    cleaned = cleaned.split("|").firstOrNull()?.trim() ?: cleaned
+    
+    return cleaned.takeIf { it.isNotBlank() } ?: raw.trim()
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -146,9 +160,32 @@ fun HomeHeroCarousel(items: List<SearchResponse>, provider: MainAPI?, onItemClic
                     // SLOW PATH: Pre-cache the real details page for "instant click"
                     // Delay slightly to prioritize UI/Image loading
                     delay(1500)
-                    if (provider != null && !GlobalDetailsCache.cache.containsKey(item.url)) {
+                    if (provider != null) {
                         try {
-                            GlobalDetailsCache.fetchRaw(provider, item.url)
+                            val details = if (!GlobalDetailsCache.cache.containsKey(item.url)) {
+                                GlobalDetailsCache.fetchRaw(provider, item.url)
+                            } else {
+                                GlobalDetailsCache.cache[item.url]
+                            }
+
+                            if (details != null) {
+                                // Now that we have the REAL details page, the name is guaranteed to be accurate!
+                                // Enrich the real details to get the TMDB backdrop, since the dummy search might have failed 
+                                // if the homepage search result had a blank or garbage name.
+                                GlobalDetailsCache.enrich(details, item.url) {}
+
+                                val currentMeta = metaMap[item.url]
+                                val newTitle = details.name.takeIf { it.isNotBlank() } ?: currentMeta?.title
+                                val newBackdrop = details.backgroundPosterUrl?.takeIf { it.isNotBlank() } ?: currentMeta?.backdropUrl
+                                val newTags = details.tags?.takeIf { it.isNotEmpty() } ?: currentMeta?.tags ?: emptyList()
+                                val newPlot = details.plot?.takeIf { it.isNotBlank() } ?: currentMeta?.plot
+                                val newScore = details.score?.toStringNull(0.5, 10) ?: currentMeta?.score
+                                val newYear = details.year ?: currentMeta?.year
+
+                                val newMeta = HeroMeta(newTitle, newBackdrop, newTags, newPlot, newScore, newYear)
+                                HeroCache.cache[cacheKey] = newMeta
+                                metaMap[item.url] = newMeta
+                            }
                         } catch (e: Exception) {
                             // Ignore scrape failures in background pre-caching
                         }

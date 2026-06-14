@@ -68,6 +68,24 @@ fun HomeTopBar(
         }?.value
     }
 
+    var textFieldValue by remember {
+        mutableStateOf(
+            androidx.compose.ui.text.input.TextFieldValue(
+                text = searchQuery,
+                selection = androidx.compose.ui.text.TextRange(searchQuery.length)
+            )
+        )
+    }
+
+    LaunchedEffect(searchQuery) {
+        if (searchQuery != textFieldValue.text) {
+            textFieldValue = textFieldValue.copy(
+                text = searchQuery,
+                selection = androidx.compose.ui.text.TextRange(searchQuery.length)
+            )
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -91,8 +109,11 @@ fun HomeTopBar(
                         modifier = Modifier.padding(start = 20.dp, end = 8.dp),
                     ) {
                         BasicTextField(
-                            value = searchQuery,
-                            onValueChange = onSearchQueryChange,
+                            value = textFieldValue,
+                            onValueChange = {
+                                textFieldValue = it
+                                onSearchQueryChange(it.text)
+                            },
                             singleLine = true,
                             textStyle = TextStyle(color = DesktopUi.TextPrimary, fontSize = 15.sp),
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(DesktopUi.TextPrimary),
@@ -100,8 +121,11 @@ fun HomeTopBar(
                             keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = onSearch),
                             decorationBox = { innerTextField ->
-                                Box(contentAlignment = Alignment.CenterStart) {
-                                    if (searchQuery.isEmpty()) {
+                                Box(
+                                    contentAlignment = Alignment.CenterStart,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (textFieldValue.text.isEmpty()) {
                                         Text("Search movies or series", color = DesktopUi.TextMuted, fontSize = 15.sp)
                                     }
                                     innerTextField()
@@ -109,10 +133,10 @@ fun HomeTopBar(
                             },
                         )
                         IconButton(onClick = {
-                            if (searchQuery.isNotBlank()) onSearchQueryChange("")
+                            if (textFieldValue.text.isNotBlank()) onSearchQueryChange("")
                         }) {
                             Icon(
-                                imageVector = if (searchQuery.isNotBlank()) Icons.Default.Close else Icons.Default.Search,
+                                imageVector = if (textFieldValue.text.isNotBlank()) Icons.Default.Close else Icons.Default.Search,
                                 contentDescription = "Search",
                                 tint = DesktopUi.TextMuted,
                             )

@@ -20,6 +20,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -216,6 +217,11 @@ object LocalStreamProxy {
 
             val keysToRemove = mergedHeaders.keys.filter { it.equals("Accept-Encoding", ignoreCase = true) }
             keysToRemove.forEach { mergedHeaders.remove(it) }
+            
+            // Explicitly request identity encoding to prevent OkHttp from transparently adding Accept-Encoding: gzip.
+            // If OkHttp uses gzip, it strips the Content-Length header, forcing Ktor to use Chunked Transfer Encoding,
+            // which breaks FFmpeg's HLS keep-alive parsing and corrupts the video sync!
+            mergedHeaders["Accept-Encoding"] = "identity"
 
             call.request.headers["Range"]?.let {
                 mergedHeaders["Range"] = it
@@ -303,28 +309,54 @@ object LocalStreamProxy {
                     ContentType.Application.OctetStream
                 }
 
-                // Stream chunks asynchronously to Ktor
+                // We stream the data exactly as-is. Since we forced Accept-Encoding: identity, 
+                // the CDN provides the exact Content-Length. Passing it to Ktor prevents 
+                // Chunked Transfer Encoding entirely, while maintaining instant Time-To-First-Byte streaming!
+                //
+                // CRITICAL ASYNCHRONOUS BUFFERING:
+                // We MUST decouple the CDN download speed from FFmpeg's consumption speed.
+                // If we stream directly (using a simple loop), and FFmpeg's buffer fills up, FFmpeg stops reading.
+                // This stalls Ktor, which stalls OkHttp, which stalls the CDN TCP connection.
+                // CDNs aggressively drop idle connections, causing playback to fail!
+                // By using an unlimited Channel, we download the segment into RAM at maximum CDN speed 
+                // in the background, keeping the CDN socket blazing fast so it never gets dropped!
                 call.respondBytesWriter(
                     contentType = parsedContentType,
                     status = HttpStatusCode.fromValue(response.code),
                     contentLength = contentLengthParam,
                 ) {
                     val streamSource = response.body?.source() ?: return@respondBytesWriter
-                    val buffer = ByteArray(65536) // 64KB chunks
-                    try {
-                        while (!isClosedForWrite) {
-                            val bytesRead = withContext(ProxyIoDispatcher) {
-                                streamSource.read(buffer)
+                    val ktorChannel = this
+
+                    kotlinx.coroutines.coroutineScope {
+                        val bufferChannel = kotlinx.coroutines.channels.Channel<ByteArray>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+
+                        val downloader = launch(ProxyIoDispatcher) {
+                            try {
+                                while (true) {
+                                    val buffer = ByteArray(65536)
+                                    val bytesRead = streamSource.read(buffer)
+                                    if (bytesRead == -1) break
+                                    bufferChannel.send(buffer.copyOfRange(0, bytesRead))
+                                }
+                            } catch (e: Exception) {
+                                // Ignored (Upstream CDN dropped connection)
+                            } finally {
+                                bufferChannel.close()
+                                response.body?.close()
                             }
-                            if (bytesRead == -1) break
-                            writeFully(buffer, 0, bytesRead)
-                            flush() // Crucial: Send data to FFmpeg immediately
                         }
-                    } catch (e: Exception) {
-                        // Ignored (Client disconnected, e.g. user seeking)
-                    } finally {
-                        withContext(ProxyIoDispatcher) {
-                            response.body?.close()
+
+                        try {
+                            for (chunk in bufferChannel) {
+                                if (ktorChannel.isClosedForWrite) break
+                                ktorChannel.writeFully(chunk)
+                                ktorChannel.flush()
+                            }
+                        } catch (e: Exception) {
+                            // Ignored (Client disconnected)
+                        } finally {
+                            downloader.cancel()
                         }
                     }
                 }

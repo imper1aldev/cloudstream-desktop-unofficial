@@ -261,6 +261,7 @@ fun EmbeddedVideoPlayer(
                                         title = actualLaunchData.title ?: "Loading...",
                                         linkName = actualLaunchData.links.getOrNull(currentLinkIndex)?.name ?: "",
                                         loadingStatus = proxyStatus,
+                                        onCancel = { isLoading = false }
                                     )
                                 }
 

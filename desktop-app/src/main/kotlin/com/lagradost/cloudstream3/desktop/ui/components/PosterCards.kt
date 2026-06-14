@@ -230,99 +230,180 @@ fun WatchHistoryCard(
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(12.dp)
+    
     val gridScale by AppearanceConfig.gridScale.collectAsState()
-    val width = when (gridScale) {
-        "Compact" -> 120.dp
-        "Large" -> 180.dp
-        else -> 150.dp
+    val baseWidth = when (gridScale) {
+        "Compact" -> 150.dp
+        "Large" -> 220.dp
+        else -> 190.dp
     }
+    
+    // Adjusted dimensions to match the exact height of standard posters
+    val cardHeight = baseWidth * 1.5f
+    val cardWidth = baseWidth * 2.2f
 
     Surface(
         modifier = modifier
-            .width(width)
-            .posterHoverEffect()
+            .width(cardWidth)
+            .height(cardHeight)
             .clip(shape)
             .clickable(onClick = onClick),
         shape = shape,
-        color = DesktopUi.SurfaceCard,
+        color = DesktopUi.SurfaceCard, // Use theme surface color
         tonalElevation = 2.dp,
     ) {
-        Column {
-            val imgUrl = provider?.fixUrlNull(history.posterUrl) ?: history.posterUrl
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(2f / 3f),
-            ) {
-                if (imgUrl != null) {
-                    AsyncImage(
-                        model = imgUrl,
-                        contentDescription = history.showName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(DesktopUi.SurfaceElevated),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("No Image", color = DesktopUi.TextMuted)
+        Box(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                // Left side: Poster Image
+                val imgUrl = provider?.fixUrlNull(history.posterUrl) ?: history.posterUrl
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(2f / 3f), // standard poster aspect
+                ) {
+                    if (imgUrl != null) {
+                        AsyncImage(
+                            model = imgUrl,
+                            contentDescription = history.showName,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(DesktopUi.SurfaceElevated),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("No Image", color = DesktopUi.TextMuted, fontSize = 11.sp)
+                        }
                     }
                 }
 
-                if (history.duration > 0) {
-                    val progress = if (PlayerLinkHandler.isCompleted(history.position, history.duration)) {
-                        1f
-                    } else {
-                        (history.position.toFloat() / history.duration.toFloat()).coerceIn(0f, 1f)
+                // Right side: Content
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .padding(start = 16.dp, top = 16.dp, end = 32.dp, bottom = 16.dp)
+                ) {
+                    // Title
+                    Text(
+                        text = history.showName,
+                        color = DesktopUi.TextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Tags row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Provider Tag
+                        if (provider != null) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = DesktopUi.Accent.copy(alpha = 0.8f) // Theme accent for provider
+                            ) {
+                                Text(
+                                    text = provider.name,
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                        
+                        // Type Tag (SERIES/MOVIE)
+                        val isSeries = history.season != null || history.episode != null
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = DesktopUi.SurfaceElevated
+                        ) {
+                            Text(
+                                text = if (isSeries) "SERIES" else "MOVIE",
+                                color = DesktopUi.TextPrimary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
                     }
+                    
+                    Spacer(modifier = Modifier.weight(1f))
+                    
+                    // Episode Text
+                    val isSeriesFinal = history.season != null || history.episode != null
+                    if (isSeriesFinal) {
+                        val s = history.season?.let { "S$it" } ?: ""
+                        val e = history.episode?.let { "E$it" } ?: ""
+                        val seText = listOf(s, e).filter { it.isNotBlank() }.joinToString(" ")
+                        if (seText.isNotBlank()) {
+                            Text(
+                                text = seText,
+                                color = DesktopUi.TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(18.dp))
+                    }
+                    
+                    // Progress Bar
+                    val progress = if (history.duration > 0) {
+                        if (com.lagradost.player.impl.PlayerLinkHandler.isCompleted(history.position, history.duration)) {
+                            1f
+                        } else {
+                            (history.position.toFloat() / history.duration.toFloat()).coerceIn(0f, 1f)
+                        }
+                    } else 0f
+                    
+                    // Always show progress bar even if 0
                     LinearProgressIndicator(
                         progress = { progress },
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .height(4.dp),
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
                         color = DesktopUi.Accent,
-                        trackColor = Color.Black.copy(alpha = 0.5f),
+                        trackColor = DesktopUi.Divider
                     )
-                }
-
-                if (history.season != null && history.episode != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            "S${history.season} E${history.episode}",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = onRemove,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(32.dp)
-                        .background(Color.Black.copy(alpha = 0.85f), CircleShape),
-                ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Remove from history",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp),
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "${(progress * 100).toInt()}% watched",
+                        color = DesktopUi.TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
-            PosterTitleLabel(title = history.showName)
+            
+            // Close Button over the top right
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(28.dp)
+                    .background(DesktopUi.SurfaceElevated.copy(alpha = 0.9f), CircleShape),
+            ) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Default.Close,
+                    contentDescription = "Remove from history",
+                    tint = DesktopUi.TextMuted,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }

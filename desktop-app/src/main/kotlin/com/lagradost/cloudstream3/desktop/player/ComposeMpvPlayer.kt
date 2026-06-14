@@ -202,14 +202,13 @@ fun ComposeMpvPlayer(
         when (validated.streamKind) {
             PlayerLinkHandler.StreamKind.HLS -> {
                 lib.mpv_set_property_string(handle, "hls-bitrate", "max")
-                // Apply strict HLS probing limits and disable persistent HTTP to prevent connection flooding on the proxy
-                // http_persistent=0 forces a new TCP connection per HLS segment.
-                // This is required because our proxy streams responses without Content-Length,
-                // which means FFmpeg can't delimit responses on a reused keep-alive connection.
+                // Apply strict HLS probing limits.
+                // http_persistent=0 is CRITICAL because FFmpeg's keep-alive parser has bugs with local proxies
+                // and will corrupt the MPEG-TS segment alignment if a proxy connection is reused.
                 lib.mpv_set_property_string(
                     handle,
                     "demuxer-lavf-o",
-                    "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,extension_picky=0,http_persistent=0",
+                    "http_persistent=0,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,extension_picky=0",
                 )
             }
             PlayerLinkHandler.StreamKind.DASH -> {

@@ -26,6 +26,7 @@ fun StreamLoadingOverlay(
     title: String,
     linkName: String,
     loadingStatus: String? = null,
+    onCancel: (() -> Unit)? = null,
 ) {
     // Animated pulsing dots
     val infiniteTransition = rememberInfiniteTransition(label = "dots")
@@ -59,10 +60,20 @@ fun StreamLoadingOverlay(
             shape = RoundedCornerShape(24.dp),
             color = Color(0xE6121212),
         ) {
-            Column(
-                modifier = Modifier.padding(36.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+            Box {
+                if (onCancel != null) {
+                    IconButton(
+                        onClick = onCancel,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = DesktopUi.TextMuted)
+                    }
+                }
+                
+                Column(
+                    modifier = Modifier.padding(36.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                 // Animated pulsing dots row
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -119,6 +130,7 @@ fun StreamLoadingOverlay(
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
                 )
+            }
             }
         }
     }

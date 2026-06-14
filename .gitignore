@@ -13,12 +13,13 @@ build/
 
 # Desktop App specific
 desktop-app/mpv/
-desktop-app/appResources/
+desktop-app/appResources/windows/mpv/portable_config/watch_later/
 *.jar
 *.cs3
 
 # Exceptions
 !gradle/wrapper/gradle-wrapper.jar
+!desktop-app/appResources/**/*.dll
 
 # Executables and Native Binaries
 *.exe

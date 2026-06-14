@@ -111,7 +111,9 @@ compose.desktop {
                 "jdk.unsupported", // Required by JNA & Coroutines Unsafe
                 "jdk.crypto.ec", // Required for HTTPS
                 "jdk.crypto.cryptoki",
+                "jdk.crypto.mscapi", // Required on Windows for some HTTPS cert verifications
                 "jdk.management",
+                "jdk.charsets", // Required to decode some foreign websites
                 "jdk.zipfs" // Required by dex2jar for JAR generation
             )
             appResourcesRootDir.set(project.layout.projectDirectory.dir("appResources"))
