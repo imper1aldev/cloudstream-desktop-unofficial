@@ -150,12 +150,30 @@ fun CloudstreamApp() {
                         }
                     }
 
-                    // The Embedded Video Player Overlay
+                    // The Embedded Video Player Overlay with smooth transitions!
+                    var lastVideo by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.lagradost.cloudstream3.desktop.ui.VideoLaunchData?>(null) }
                     if (currentVideo != null) {
-                        com.lagradost.cloudstream3.desktop.ui.screens.player.EmbeddedVideoPlayer(
-                            launchData = currentVideo!!,
-                            onClose = { currentVideo = null },
-                        )
+                        lastVideo = currentVideo
+                    }
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = currentVideo != null,
+                        enter = androidx.compose.animation.slideInVertically(
+                            initialOffsetY = { it }, // Slide up from bottom
+                            animationSpec = androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                        ) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(400)),
+                        exit = androidx.compose.animation.slideOutVertically(
+                            targetOffsetY = { it }, // Slide down
+                            animationSpec = androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                        ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(400)),
+                        modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                    ) {
+                        lastVideo?.let { launchData ->
+                            com.lagradost.cloudstream3.desktop.ui.screens.player.EmbeddedVideoPlayer(
+                                launchData = launchData,
+                                onClose = { currentVideo = null },
+                            )
+                        }
                     }
                 }
             }
