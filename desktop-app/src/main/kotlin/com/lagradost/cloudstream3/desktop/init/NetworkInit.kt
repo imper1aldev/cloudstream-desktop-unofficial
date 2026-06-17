@@ -63,8 +63,9 @@ fun initNetwork() {
                                         }
                                     }
 
-                                    if (fieldsSet < 2) {
-                                        AppLogger.e("FATAL: Could not set all fields on VerifiedRepo via Unsafe!")
+                                    // Suppress FATAL log, VerifiedRepo usually only has the url field.
+                                    if (fieldsSet == 0) {
+                                        AppLogger.e("Warning: Could not set any fields on VerifiedRepo via Unsafe!")
                                     }
                                     return instance
                                 } catch (e: Exception) {

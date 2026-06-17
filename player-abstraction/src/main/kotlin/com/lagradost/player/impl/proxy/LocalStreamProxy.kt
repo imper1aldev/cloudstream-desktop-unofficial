@@ -65,6 +65,7 @@ object LocalStreamProxyState {
     val loadingStatus = MutableStateFlow<String?>(null)
     val lazyAudioTracks = MutableStateFlow<List<ProxyTrack>>(emptyList())
     val lazySubtitleTracks = MutableStateFlow<List<ProxyTrack>>(emptyList())
+    val lazyVideoTracks = MutableStateFlow<List<ProxyTrack>>(emptyList())
 }
 
 object LocalStreamProxy {
@@ -328,35 +329,23 @@ object LocalStreamProxy {
                     val streamSource = response.body?.source() ?: return@respondBytesWriter
                     val ktorChannel = this
 
-                    kotlinx.coroutines.coroutineScope {
-                        val bufferChannel = kotlinx.coroutines.channels.Channel<ByteArray>(kotlinx.coroutines.channels.Channel.UNLIMITED)
-
-                        val downloader = launch(ProxyIoDispatcher) {
-                            try {
-                                while (true) {
-                                    val buffer = ByteArray(65536)
-                                    val bytesRead = streamSource.read(buffer)
-                                    if (bytesRead == -1) break
-                                    bufferChannel.send(buffer.copyOfRange(0, bytesRead))
-                                }
-                            } catch (e: Exception) {
-                                // Ignored (Upstream CDN dropped connection)
-                            } finally {
-                                bufferChannel.close()
-                                response.body?.close()
+                    val buffer = ByteArray(65536) // 64KB chunks
+                    try {
+                        while (!ktorChannel.isClosedForWrite) {
+                            val bytesRead = withContext(ProxyIoDispatcher) {
+                                streamSource.read(buffer)
                             }
+                            if (bytesRead == -1) break
+                            
+                            // Write directly to Ktor. Ktor's internal buffer will automatically suspend this coroutine 
+                            // if it's full (i.e. MPV isn't reading fast enough), applying natural backpressure to the network!
+                            ktorChannel.writeFully(buffer, 0, bytesRead)
                         }
-
-                        try {
-                            for (chunk in bufferChannel) {
-                                if (ktorChannel.isClosedForWrite) break
-                                ktorChannel.writeFully(chunk)
-                                ktorChannel.flush()
-                            }
-                        } catch (e: Exception) {
-                            // Ignored (Client disconnected)
-                        } finally {
-                            downloader.cancel()
+                    } catch (e: Exception) {
+                        // Ignored (Client disconnected, e.g. user seeking)
+                    } finally {
+                        withContext(ProxyIoDispatcher) {
+                            response.body?.close()
                         }
                     }
                 }
@@ -378,6 +367,7 @@ object LocalStreamProxy {
         if (isMaster) {
             val lazyAudios = mutableListOf<ProxyTrack>()
             val lazySubs = mutableListOf<ProxyTrack>()
+            val lazyVideoTracks = mutableListOf<ProxyTrack>()
             var hasKeptAudio = false
 
             // Pass 1: Find best video variant and default audio variant
@@ -479,11 +469,20 @@ object LocalStreamProxy {
                     } else {
                         // URL line
                         if (pendingVariantLine != null) {
+                            val absolute = resolveUrl(baseUrl, trim)
+                            val proxyUrl = buildProxyUrl(sessionId, absolute)
+
                             if (trim == bestVariantUrl) {
-                                // Keep this variant
+                                // Keep this variant in the proxy M3U8
                                 appendLine(pendingVariantLine)
-                                val absolute = resolveUrl(baseUrl, trim)
-                                appendLine(buildProxyUrl(sessionId, absolute))
+                                appendLine(proxyUrl)
+                            } else {
+                                // Strip it from the M3U8, but expose it via lazyVideoTracks!
+                                val bwMatch = BW_REGEX.find(pendingVariantLine)
+                                val resMatch = RES_REGEX.find(pendingVariantLine)
+                                val res = resMatch?.groupValues?.get(1) ?: "Unknown"
+                                val name = if (res != "Unknown") "${res}p" else "Variant"
+                                lazyVideoTracks.add(ProxyTrack(proxyUrl, name, "eng"))
                             }
                             pendingVariantLine = null
                         } else {
@@ -497,6 +496,7 @@ object LocalStreamProxy {
 
             LocalStreamProxyState.lazyAudioTracks.value = lazyAudios
             LocalStreamProxyState.lazySubtitleTracks.value = lazySubs
+            LocalStreamProxyState.lazyVideoTracks.value = lazyVideoTracks
             LocalStreamProxyState.loadingStatus.value = null // Hide loading toast since we stripped them!
 
             return rewritten

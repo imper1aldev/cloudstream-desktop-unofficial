@@ -106,6 +106,7 @@ fun ComposeMpvPlayer(
 
                         val audioTracks = mutableListOf<PlayerState.VideoTrack>()
                         val subTracks = mutableListOf<PlayerState.VideoTrack>()
+                        val videoTracks = mutableListOf<PlayerState.VideoTrack>()
 
                         for (i in 0 until trackCount) {
                             val id = MpvLibrary.INSTANCE.mpv_get_property_string(h, "track-list/$i/id")?.toIntOrNull() ?: continue
@@ -120,16 +121,26 @@ fun ComposeMpvPlayer(
                                     if (isNotEmpty()) append(" - ")
                                     append(title)
                                 }
-                                if (isEmpty()) append(if (type == "audio") "Audio $id" else "Subtitle $id")
+                                if (isEmpty()) append(if (type == "audio") "Audio $id" else if (type == "video") "Video $id" else "Subtitle $id")
                             }
                             if (type == "audio") {
                                 audioTracks.add(PlayerState.VideoTrack(id, name, selected))
                             } else if (type == "sub") {
                                 subTracks.add(PlayerState.VideoTrack(id, name, selected))
+                            } else if (type == "video") {
+                                val res = MpvLibrary.INSTANCE.mpv_get_property_string(h, "track-list/$i/demux-h") ?: ""
+                                val fpsVal = MpvLibrary.INSTANCE.mpv_get_property_string(h, "track-list/$i/demux-fps")?.toDoubleOrNull() ?: 0.0
+                                val finalName = if (res.isNotEmpty()) {
+                                    if (fpsVal > 30.0) "${res}p ${fpsVal.toInt()}fps" else "${res}p"
+                                } else {
+                                    name
+                                }
+                                videoTracks.add(PlayerState.VideoTrack(id, finalName, selected))
                             }
                         }
                         playerState?.audioTracks?.value = audioTracks
                         playerState?.subtitleTracks?.value = subTracks
+                        playerState?.videoTracks?.value = videoTracks
                         // Poll Video Stats
                         if (playerState != null && playerState.showStats.value) {
                             playerState.videoCodec.value = MpvLibrary.INSTANCE.mpv_get_property_string(h, "video-codec") ?: "Unknown"

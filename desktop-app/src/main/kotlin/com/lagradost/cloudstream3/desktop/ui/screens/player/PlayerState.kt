@@ -25,6 +25,7 @@ class PlayerState {
 
     val subtitleTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
     val audioTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
+    val videoTracks = MutableStateFlow<List<VideoTrack>>(emptyList()) // New State for Qualities
 
     // Video Stats
     val videoCodec = MutableStateFlow("")
@@ -144,6 +145,16 @@ class PlayerState {
         }
     }
 
+    fun setVideoTrack(id: Int?) {
+        mpvHandle?.let {
+            if (id == null) {
+                MpvLibrary.INSTANCE.mpv_set_property_string(it, "vid", "auto")
+            } else {
+                MpvLibrary.INSTANCE.mpv_set_property_string(it, "vid", id.toString())
+            }
+        }
+    }
+
     data class LazyTrack(
         val url: String,
         val name: String,
@@ -168,6 +179,17 @@ class PlayerState {
             val safeLang = track.language.replace("\\", "\\\\").replace("\"", "\\\"")
             // MPV command: sub-add <url> select <title> <lang>
             val cmd = "sub-add \"$safeUrl\" select \"$safeName\" \"$safeLang\""
+            MpvLibrary.INSTANCE.mpv_command_string(it, cmd)
+        }
+    }
+
+    fun loadLazyVideoTrack(track: LazyTrack) {
+        mpvHandle?.let {
+            val safeUrl = track.url.replace("\\", "\\\\").replace("\"", "\\\"")
+            val safeName = track.name.replace("\\", "\\\\").replace("\"", "\\\"")
+            val safeLang = track.language.replace("\\", "\\\\").replace("\"", "\\\"")
+            // MPV command: video-add <url> select <title> <lang>
+            val cmd = "video-add \"$safeUrl\" select \"$safeName\" \"$safeLang\""
             MpvLibrary.INSTANCE.mpv_command_string(it, cmd)
         }
     }
