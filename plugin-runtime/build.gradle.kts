@@ -21,4 +21,10 @@ dependencies {
     // ASM Bytecode Manipulation for Static Verification
     implementation("org.ow2.asm:asm:9.6")
     implementation("org.ow2.asm:asm-tree:9.6")
+
+    testImplementation(kotlin("test"))
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

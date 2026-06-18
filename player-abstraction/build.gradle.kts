@@ -13,4 +13,11 @@ dependencies {
     // We may need to depend on the library to pass SubtitleData and ExtractorLink
     implementation(project(":library"))
     implementation(project(":common"))
+
+    testImplementation(kotlin("test"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

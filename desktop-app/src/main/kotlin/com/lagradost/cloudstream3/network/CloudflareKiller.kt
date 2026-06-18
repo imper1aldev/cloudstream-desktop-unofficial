@@ -67,7 +67,7 @@ class CloudflareKiller : Interceptor {
 
         // If we already have cookies for this host, use them directly (skip the initial request)
         if (savedCookies.containsKey(host)) {
-            return@runBlocking proceed(request, savedCookies[host] ?: emptyMap(), savedUserAgents[host])
+            return@runBlocking proceed(chain, request, savedCookies[host] ?: emptyMap(), savedUserAgents[host])
         }
 
         // If this host already failed bypass, don't waste time — just proceed normally
@@ -101,7 +101,7 @@ class CloudflareKiller : Interceptor {
         }
 
         try {
-            val bypassed = bypassCloudflare(request)
+            val bypassed = bypassCloudflare(chain, request)
             if (bypassed != null) {
                 return@runBlocking bypassed
             }
@@ -117,7 +117,7 @@ class CloudflareKiller : Interceptor {
         return@runBlocking chain.proceed(request)
     }
 
-    private suspend fun proceed(request: Request, cookies: Map<String, String>, userAgent: String?): Response {
+    private fun proceed(chain: Interceptor.Chain, request: Request, cookies: Map<String, String>, userAgent: String?): Response {
         val builder = request.newBuilder()
         if (userAgent != null) {
             builder.header("user-agent", userAgent)
@@ -129,10 +129,10 @@ class CloudflareKiller : Interceptor {
             builder.header("cookie", finalCookies.entries.joinToString("; ") { "${it.key}=${it.value}" })
         }
 
-        return app.baseClient.newCall(builder.build()).await()
+        return chain.proceed(builder.build())
     }
 
-    private suspend fun bypassCloudflare(request: Request): Response? {
+    private suspend fun bypassCloudflare(chain: Interceptor.Chain, request: Request): Response? {
         val url = request.url.toString()
         val host = request.url.host
         AppLogger.i("$TAG: Loading Native Edge/Chrome to solve Cloudflare for $host")
@@ -161,8 +161,12 @@ class CloudflareKiller : Interceptor {
             if (userAgentHeader != null) {
                 savedUserAgents[host] = userAgentHeader
             }
-            AppLogger.i("$TAG: Successfully bypassed Cloudflare for $host")
-            return proceed(request, savedCookies[host] ?: emptyMap(), savedUserAgents[host])
+            solved = true
+        }
+
+        if (solved) {
+            AppLogger.i("$TAG: Cloudflare bypassed successfully for $host")
+            return proceed(chain, request, savedCookies[host] ?: emptyMap(), savedUserAgents[host])
         }
 
         return null

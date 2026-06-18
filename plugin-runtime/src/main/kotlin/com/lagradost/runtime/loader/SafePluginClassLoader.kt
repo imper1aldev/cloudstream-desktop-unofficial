@@ -146,8 +146,8 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
             }
         }
 
-        // Block OS command execution
-        if (name == "java.lang.ProcessBuilder") {
+        // Block OS command execution and sandbox escapes
+        if (name == "java.lang.ProcessBuilder" || name == "java.lang.Runtime" || name == "java.lang.Thread" || name == "java.lang.ClassLoader") {
             return true
         }
 
@@ -160,8 +160,6 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
         if (name.startsWith("java.lang.invoke.")) {
             val safeInvoke = setOf(
                 "java.lang.invoke.LambdaMetafactory",
-                "java.lang.invoke.MethodHandles",
-                "java.lang.invoke.MethodHandles\$Lookup",
                 "java.lang.invoke.MethodType",
                 "java.lang.invoke.CallSite",
                 "java.lang.invoke.ConstantCallSite",

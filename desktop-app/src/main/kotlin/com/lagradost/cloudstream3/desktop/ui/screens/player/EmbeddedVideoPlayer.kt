@@ -16,6 +16,8 @@ import com.lagradost.cloudstream3.desktop.player.ComposeMpvPlayer
 import com.lagradost.cloudstream3.desktop.ui.LocalWindowState
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.common.storage.DesktopDataStore
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 fun EmbeddedVideoPlayer(
@@ -112,6 +114,7 @@ fun EmbeddedVideoPlayer(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     if (actualLaunchData.links.isNotEmpty()) {
+                        var saveJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
                         ComposeMpvPlayer(
                             link = actualLaunchData.links.getOrNull(currentLinkIndex) ?: return@Box,
                             title = actualLaunchData.title,
@@ -133,7 +136,11 @@ fun EmbeddedVideoPlayer(
                                         duration = currentDurSec,
                                         updateTime = System.currentTimeMillis(),
                                     )
-                                    DesktopDataStore.setLastWatched(updatedHistory)
+                                    saveJob?.cancel()
+                                    saveJob = coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        delay(2000)
+                                        DesktopDataStore.setLastWatched(updatedHistory)
+                                    }
                                 }
                             },
                             onCloseRequest = {

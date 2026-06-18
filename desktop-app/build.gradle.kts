@@ -75,6 +75,8 @@ dependencies {
     // Logging
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
+
+    testImplementation(kotlin("test"))
 }
 
 // Compose Desktop application configuration
@@ -127,4 +129,8 @@ compose.desktop {
             }
         }
     }
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
