@@ -14,7 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.lagradost.cloudstream3.desktop.repo.DesktopRepositoryManager
+import com.lagradost.cloudstream3.desktop.ui.components.AppDropdownMenu
 import com.lagradost.cloudstream3.desktop.ui.components.ExtensionCard
 import com.lagradost.cloudstream3.desktop.ui.components.FlagImage
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
@@ -87,7 +89,7 @@ fun BrowseTab(viewModel: ExtensionsViewModel, syncGeneration: Int) {
                     }
                     Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                 }
-                DropdownMenu(expanded = showLangDropdown, onDismissRequest = { showLangDropdown = false }) {
+                AppDropdownMenu(expanded = showLangDropdown, onDismissRequest = { showLangDropdown = false }) {
                     languages.forEach { lang ->
                         DropdownMenuItem(
                             text = {
@@ -119,7 +121,7 @@ fun BrowseTab(viewModel: ExtensionsViewModel, syncGeneration: Int) {
                     Text(if (categoryFilter == "All") "All Categories" else categoryFilter)
                     Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                 }
-                DropdownMenu(expanded = showCatDropdown, onDismissRequest = { showCatDropdown = false }) {
+                AppDropdownMenu(expanded = showCatDropdown, onDismissRequest = { showCatDropdown = false }) {
                     categories.forEach { cat ->
                         DropdownMenuItem(
                             text = { Text(if (cat == "All") "All Categories" else cat) },
@@ -142,7 +144,7 @@ fun BrowseTab(viewModel: ExtensionsViewModel, syncGeneration: Int) {
                     Text(if (repoFilter == "All") "All Repos" else repoFilter)
                     Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                 }
-                DropdownMenu(expanded = showRepoDropdown, onDismissRequest = { showRepoDropdown = false }) {
+                AppDropdownMenu(expanded = showRepoDropdown, onDismissRequest = { showRepoDropdown = false }) {
                     reposList.forEach { r ->
                         DropdownMenuItem(
                             text = { Text(if (r == "All") "All Repos" else r) },

@@ -15,6 +15,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.unit.sp
 import com.lagradost.cloudstream3.desktop.ui.screens.QualitySelector
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -23,6 +25,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 fun SourcesOverlay(
     links: List<ExtractorLink>,
     currentIndex: Int,
+    failedLinks: Set<Int> = emptySet(),
     onLinkSelected: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -45,6 +48,7 @@ fun SourcesOverlay(
             .fillMaxHeight()
             .width(400.dp)
             .background(Color(0xFF0F0F16)) // Dark bluish/black exact to screenshot
+            .pointerInput(Unit) { detectTapGestures(onTap = {}, onDoubleTap = {}) }
             .padding(24.dp),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -98,15 +102,37 @@ fun SourcesOverlay(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = link.name,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (failedLinks.contains(originalIndex)) Color.Red else Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            if (link.url.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = link.url,
+                                    color = if (failedLinks.contains(originalIndex)) Color.Red.copy(alpha=0.6f) else Color.White.copy(alpha = 0.5f),
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+
+                        if (failedLinks.contains(originalIndex)) {
                             Text(
-                                text = "${link.quality} • ${if (link.isM3u8) "HLS" else "MP4"}",
-                                color = Color.LightGray,
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "Failed",
+                                color = Color.Red,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        } else if (isSelected) {
+                            Text(
+                                text = "Playing",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
                             )
                         }
                     }

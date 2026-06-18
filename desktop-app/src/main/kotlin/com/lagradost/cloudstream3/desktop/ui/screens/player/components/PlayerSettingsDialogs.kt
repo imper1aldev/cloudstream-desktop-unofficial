@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.desktop.ui.screens.player.PlayerState
 
@@ -45,11 +47,7 @@ fun SettingsDialog(
             modifier = Modifier
                 .padding(end = 48.dp, bottom = 120.dp)
                 .widthIn(max = 400.dp)
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                    onClick = {}, // Consume clicks inside
-                ),
+                .pointerInput(Unit) { detectTapGestures(onTap = {}, onDoubleTap = {}) },
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("Player Settings", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)

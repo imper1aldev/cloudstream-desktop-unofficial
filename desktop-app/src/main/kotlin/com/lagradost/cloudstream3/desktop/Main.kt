@@ -110,11 +110,37 @@ fun main() {
         ) {
             window.minimumSize = java.awt.Dimension(1000, 700)
             
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                setWindowsDarkMode(window)
+            }
+            
             androidx.compose.runtime.CompositionLocalProvider(
                 com.lagradost.cloudstream3.desktop.ui.LocalWindowState provides state,
             ) {
                 CloudstreamApp()
             }
         }
+    }
+}
+
+private interface Dwmapi : com.sun.jna.Library {
+    companion object {
+        val INSTANCE = com.sun.jna.Native.load("dwmapi", Dwmapi::class.java) as Dwmapi
+    }
+    fun DwmSetWindowAttribute(hwnd: com.sun.jna.Pointer, dwAttribute: Int, pvAttribute: com.sun.jna.ptr.IntByReference, cbAttribute: Int): Int
+}
+
+private fun setWindowsDarkMode(window: java.awt.Window) {
+    if (!System.getProperty("os.name").lowercase().contains("win")) return
+    try {
+        val hwnd = com.sun.jna.Pointer(com.sun.jna.Native.getComponentID(window))
+        val trueValue = com.sun.jna.ptr.IntByReference(1)
+        
+        var result = Dwmapi.INSTANCE.DwmSetWindowAttribute(hwnd, 20, trueValue, 4)
+        if (result != 0) {
+            Dwmapi.INSTANCE.DwmSetWindowAttribute(hwnd, 19, trueValue, 4)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }

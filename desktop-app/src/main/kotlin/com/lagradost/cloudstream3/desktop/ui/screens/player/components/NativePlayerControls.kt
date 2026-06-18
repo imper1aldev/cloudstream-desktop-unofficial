@@ -43,12 +43,14 @@ fun NativePlayerControls(
     onCloseClick: () -> Unit,
     onFullscreenToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    showSources: Boolean = false,
+    onShowSourcesChange: (Boolean) -> Unit = {},
+    failedLinks: Set<Int> = emptySet(),
 ) {
     val showControls by playerState.showControls.collectAsState()
 
     var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var showSettings by remember { mutableStateOf(false) }
-    var showSources by remember { mutableStateOf(false) }
     var showEpisodes by remember { mutableStateOf(false) }
 
     var showSettingsTab by remember { mutableStateOf(0) }
@@ -81,7 +83,7 @@ fun NativePlayerControls(
                         if (showEpisodes || showSettings || showSources) {
                             showEpisodes = false
                             showSettings = false
-                            showSources = false
+                            onShowSourcesChange(false)
                         } else {
                             playerState.togglePlayPause()
                             // Force controls to show when toggling play/pause via click
@@ -168,7 +170,7 @@ fun NativePlayerControls(
                         showSettings = true
                         showSettingsTab = 2
                     },
-                    onSourcesClick = { showSources = true },
+                    onSourcesClick = { onShowSourcesChange(true) },
                     onFullscreenClick = onFullscreenToggle,
                     isFullscreen = isFullscreen,
                     onAspectRatioClick = { playerState.cycleAspectRatio() },
@@ -222,8 +224,9 @@ fun NativePlayerControls(
             SourcesOverlay(
                 links = launchData.links,
                 currentIndex = currentLinkIndex,
+                failedLinks = failedLinks,
                 onLinkSelected = onLinkSelected,
-                onClose = { showSources = false },
+                onClose = { onShowSourcesChange(false) },
             )
         }
     }

@@ -100,12 +100,14 @@ fun HomeCategorySection(
         // Header logic moved inside the loop to prevent awkward gaps
 
         if (isLoading) {
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Loading...", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
-                }
+            if (isFirstPage) {
+                HomeHeroCarouselPlaceholder()
+            } else {
+                CategoryRowPlaceholder(
+                    title = pageData.name,
+                    maxWidthConstraint = maxWidthConstraint,
+                    showLargeHeader = !isFirstPage
+                )
             }
         } else if (homePage != null && homePage!!.items.isNotEmpty()) {
             homePage!!.items.forEachIndexed { sectionIndex, section ->

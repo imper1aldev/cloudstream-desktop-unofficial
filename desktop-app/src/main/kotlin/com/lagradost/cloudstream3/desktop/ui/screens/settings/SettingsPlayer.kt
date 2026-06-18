@@ -7,8 +7,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.lagradost.cloudstream3.desktop.player.PlayerConfig
 import com.lagradost.common.storage.DesktopDataStore
+import com.lagradost.cloudstream3.desktop.ui.components.AppDropdownMenu
 
 @Composable
 fun SettingsPlayer() {
@@ -153,7 +155,7 @@ fun PlayerDropdownSetting(
             FilledTonalButton(onClick = { expanded = true }) {
                 Text(options.find { it.first == currentValue }?.second ?: currentValue)
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 options.forEach { (value, title) ->
                     DropdownMenuItem(
                         text = { Text(title) },

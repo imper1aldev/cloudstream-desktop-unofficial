@@ -42,6 +42,8 @@ fun EmbeddedVideoPlayer(
 
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var failedLinks by remember { mutableStateOf(setOf<Int>()) }
+    var showSources by remember { mutableStateOf(false) }
     var isFinished by remember { mutableStateOf(false) }
     var lastPositionSec by remember { mutableStateOf(0L) }
     var lastDurationSec by remember { mutableStateOf(0L) }
@@ -146,11 +148,40 @@ fun EmbeddedVideoPlayer(
                                 }
                             },
                             onPlaybackError = { err ->
-                                if (autoPlay && currentLinkIndex < actualLaunchData.links.size - 1) {
-                                    currentLinkIndex++
-                                    isLoading = true
-                                } else {
-                                    errorMessage = err
+                                val newFailed = failedLinks + currentLinkIndex
+                                failedLinks = newFailed
+
+                                // Find next non-failed link index to auto-failover to
+                                val nextIndex = (0 until actualLaunchData.links.size)
+                                    .firstOrNull { it > currentLinkIndex && it !in newFailed }
+
+                                when {
+                                    nextIndex != null -> {
+                                        // Silently advance to the next working link
+                                        currentLinkIndex = nextIndex
+                                        isLoading = true
+                                        errorMessage = null
+                                    }
+                                    newFailed.size >= actualLaunchData.links.size -> {
+                                        // All links exhausted
+                                        errorMessage = "All sources failed. Please try again later."
+                                        showSources = true
+                                        isLoading = false
+                                    }
+                                    else -> {
+                                        // No more links ahead, but there may be untried ones before current
+                                        val anyUntried = (0 until actualLaunchData.links.size)
+                                            .firstOrNull { it !in newFailed }
+                                        if (anyUntried != null) {
+                                            currentLinkIndex = anyUntried
+                                            isLoading = true
+                                            errorMessage = null
+                                        } else {
+                                            errorMessage = "All sources failed. Please try again later."
+                                            showSources = true
+                                            isLoading = false
+                                        }
+                                    }
                                 }
                             },
                             onFullscreenToggle = {
@@ -225,6 +256,9 @@ fun EmbeddedVideoPlayer(
                                     isFullscreen = isFullscreen,
                                     hasNextEpisode = viewModel.hasNextEpisode(),
                                     hasPrevEpisode = viewModel.hasPrevEpisode(),
+                                    showSources = showSources,
+                                    onShowSourcesChange = { showSources = it },
+                                    failedLinks = failedLinks,
                                     onNextEpisode = {
                                         playerState?.pause()
                                         viewModel.loadNextEpisode()
@@ -235,6 +269,7 @@ fun EmbeddedVideoPlayer(
                                     },
                                     onEpisodeSelected = {
                                         playerState?.pause()
+                                        failedLinks = emptySet()
                                         viewModel.loadEpisode(it)
                                     },
                                     onLinkSelected = { newIndex ->

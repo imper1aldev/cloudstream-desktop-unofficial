@@ -31,6 +31,11 @@ fun ComposeMpvPlayer(
     var mpvHandle by remember { mutableStateOf<com.sun.jna.Pointer?>(null) }
     var hasEverPlayed by remember { mutableStateOf(false) }
     var loadStartTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    // Tracks when the last loadfile command was sent. 0L = no loadfile issued yet.
+    // Used to gate the idle-active fast-fail check — MPV starts in idle-active=yes
+    // and also returns to idle-active=yes after stop(), so we must not check until
+    // AFTER loadfile has been issued and had time to take effect.
+    var loadfileIssuedAt by remember { mutableStateOf(0L) }
 
     val currentOnPlaybackReady by rememberUpdatedState(onPlaybackReady)
     val currentOnPlaybackError by rememberUpdatedState(onPlaybackError)
@@ -181,12 +186,29 @@ fun ComposeMpvPlayer(
                         // that hit a temporary EOF. Don't break, let MPV's internal reconnect handle it.
                     }
 
+                    // Fast-fail detection: if MPV goes idle-active AFTER loadfile has been issued,
+                    // the stream was definitively rejected (403, 404, connection refused, etc.).
+                    // IMPORTANT: We must NOT check idle-active before loadfile is sent, because:
+                    //   - MPV always starts in idle-active=yes
+                    //   - MPV returns to idle-active=yes after our stop() before each loadfile
+                    // So gate this check on: loadfileIssuedAt > 0 (loadfile was sent)
+                    // AND a 800ms grace period for MPV to receive and start processing the command.
+                    if (!hasEverPlayed && loadfileIssuedAt > 0 &&
+                        System.currentTimeMillis() - loadfileIssuedAt > 800) {
+                        val idleActive = MpvLibrary.INSTANCE.mpv_get_property_string(h, "idle-active")
+                        if (idleActive == "yes") {
+                            com.lagradost.common.logging.AppLogger.e("MPV went idle-active after loadfile — stream failed (likely 403/404)")
+                            currentOnPlaybackError("Stream failed to load (connection rejected or forbidden).")
+                            break
+                        }
+                    }
+
                     // Check timeout. Allow user to strictly control how long they wait before skipping.
                     val timeoutStr = com.lagradost.common.storage.DesktopDataStore.getKey<String>(PlayerConfig.PREF_AUTO_PLAY_TIMEOUT)
                     val userTimeoutMs = timeoutStr?.toLongOrNull() ?: 20000L
 
                     // For complex HLS streams with many tracks, probing all of them in safe batches takes 10-15s.
-                    // Enforce a minimum of 30s timeout here to ensure FFmpeg isn't killed prematurely.
+                    // Enforce a minimum of 90s timeout here to ensure FFmpeg isn't killed prematurely.
                     val timeoutMs = maxOf(userTimeoutMs, 90000L)
 
                     if (!hasEverPlayed && System.currentTimeMillis() - loadStartTime > timeoutMs) {
@@ -202,6 +224,10 @@ fun ComposeMpvPlayer(
     }
 
     LaunchedEffect(link, mpvHandle) {
+        // IMPORTANT: Prevent the watcher loop from false-firing its idle-active check 
+        // while we are setting up the new link.
+        loadfileIssuedAt = 0L
+
         val handle = mpvHandle ?: return@LaunchedEffect
 
         val validated = PlayerLinkHandler.validate(link, title).getOrElse {
@@ -210,20 +236,54 @@ fun ComposeMpvPlayer(
         }
 
         val lib = MpvLibrary.INSTANCE
+
+        // NOTE: We intentionally do NOT inject headers into demuxer-lavf-o because the
+        // option string is comma-delimited and header values containing commas (like
+        // User-Agent with "(KHTML, like Gecko)") break AVOption parsing and corrupt all
+        // subsequent options including cenc_decryption_key.
+        // MPV's http-header-fields property IS forwarded by the stream callback handler
+        // to every sub-request FFmpeg makes (init.mp4, segments, etc.) as proven by
+        // segments downloading successfully without 403 in testing.
+
+        // Clear previous lavf options to prevent bleeding across stream loads
+        lib.mpv_set_property_string(handle, "demuxer-lavf-o", "")
+        lib.mpv_set_property_string(handle, "stream-lavf-o", "")
+
         when (validated.streamKind) {
             PlayerLinkHandler.StreamKind.HLS -> {
                 lib.mpv_set_property_string(handle, "hls-bitrate", "max")
-                // Apply strict HLS probing limits.
-                // http_persistent=0 is CRITICAL because FFmpeg's keep-alive parser has bugs with local proxies
-                // and will corrupt the MPEG-TS segment alignment if a proxy connection is reused.
-                lib.mpv_set_property_string(
+                lib.mpv_set_option_string(
                     handle,
                     "demuxer-lavf-o",
-                    "http_persistent=0,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,extension_picky=0",
+                    "extension_picky=0",
                 )
+                // HLS via LocalStreamProxy: give MPV enough forward buffer to handle
+                // bursty CDN delivery without pausing, but don't buffer more than 30s
+                // ahead — live streams only have ~10-30s of future segments anyway.
+                // Back-buffer: keep only 5MB — you can't seek backwards on live TV.
+                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "50000000")      // 50MB forward
+                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "5000000")   // 5MB back
+                lib.mpv_set_property_string(handle, "cache", "yes")
+                lib.mpv_set_property_string(handle, "cache-secs", "30")       // 30s lookahead cap, not 3600s
+                lib.mpv_set_property_string(handle, "cache-pause-wait", "3")  // Wait 3s before pausing
             }
             PlayerLinkHandler.StreamKind.DASH -> {
-                lib.mpv_set_property_string(handle, "demuxer-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4")
+                // Build DASH lavf options. cenc_decryption_key MUST be standalone —
+                // do not mix with headers= as commas in header values corrupt the parse.
+                val lavfDashOpts = buildString {
+                    // Reconnect on HTTP errors. Commas MUST be avoided in the value to prevent
+                    // corrupting MPV's option parser (which uses commas to separate key=val pairs).
+                    append("reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx")
+                    if (validated.clearKeyHex != null) {
+                        append(",cenc_decryption_key=${validated.clearKeyHex}")
+                    }
+                }
+                lib.mpv_set_option_string(handle, "demuxer-lavf-o", lavfDashOpts)
+                // DASH: 30MB forward buffer is plenty for 1080p segments (~4MB each)
+                // Back-buffer: 5MB for live, could be more for VOD but keep conservative
+                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "30000000")       // 30MB forward
+                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "5000000")   // 5MB back
+                lib.mpv_set_property_string(handle, "cache", "yes")
             }
             PlayerLinkHandler.StreamKind.PROGRESSIVE -> {
                 // Raw MPEG-TS / progressive HTTP live streams need reconnect too.
@@ -231,40 +291,26 @@ fun ComposeMpvPlayer(
                 lib.mpv_set_property_string(
                     handle,
                     "demuxer-lavf-o",
-                    "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4",
+                    "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx",
                 )
                 // Stream-level reconnect is critical for live MPEG-TS over HTTP.
-                // demuxer-lavf-o alone may not propagate to the stream protocol layer.
                 lib.mpv_set_property_string(
                     handle,
                     "stream-lavf-o",
                     "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4",
                 )
+                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "20000000")      // 20MB
+                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "5000000")  // 5MB
+                lib.mpv_set_property_string(handle, "cache", "yes")
             }
         }
 
-        // Disable auto-probing of subtitles and pre-select English audio
-        // This is critical for complex HLS streams with 20+ tracks to prevent the initial demuxer probe
-        // from timing out by aggressively downloading multiple streams concurrently.
+        // Disable auto-probing of subtitles and pre-select English audio.
+        // Critical for complex HLS streams with 20+ tracks.
         lib.mpv_set_property_string(handle, "alang", "eng,en")
         lib.mpv_set_property_string(handle, "sub-auto", "no")
         lib.mpv_set_property_string(handle, "sid", "no")
         lib.mpv_set_property_string(handle, "aid", "auto")
-
-        // Increase buffer sizes to accommodate slow proxies or CDN connections
-        // For HLS streams, we give MPV much more buffer time (500MB max) to allow
-        // aggressive background fetching. This makes seeking forward instant.
-        val isHls = validated.streamKind == PlayerLinkHandler.StreamKind.HLS
-        val maxBytes = if (isHls) "500000000" else "150000000" // 500MB for HLS, 150MB for others
-        lib.mpv_set_property_string(handle, "demuxer-max-bytes", maxBytes)
-        lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "150000000") // 150MB
-        lib.mpv_set_property_string(handle, "cache", "yes")
-        // Allow MPV to buffer up to 1 hour ahead, limited only by maxBytes
-        if (isHls) {
-            lib.mpv_set_property_string(handle, "cache-secs", "3600")
-            // Wait up to 3 seconds before pausing for buffering
-            lib.mpv_set_property_string(handle, "cache-pause-wait", "3")
-        }
 
         val startSec = startPositionMs / 1000L
         if (startSec > 0) {
@@ -305,6 +351,7 @@ fun ComposeMpvPlayer(
 
         hasEverPlayed = false // Now it's safe to reset the playback flag for the new link
         loadStartTime = System.currentTimeMillis() // Reset the buffering timeout clock
+        loadfileIssuedAt = System.currentTimeMillis() // Mark that loadfile is about to be sent
 
         lib.mpv_command_string(handle, "loadfile \"$safeUrl\"")
 
@@ -315,26 +362,53 @@ fun ComposeMpvPlayer(
 
         // Subtitles handling
         val sessionId = validated.proxySessionId
-        val finalSubtitles = if (sessionId != null) {
-            subtitles.map { it.copy(url = com.lagradost.player.impl.proxy.LocalStreamProxy.buildProxyUrl(sessionId, it.url)) }
-        } else {
-            subtitles
+        val videoUrlHost = try {
+            java.net.URI(link.url).host
+        } catch (e: Exception) { null }
+
+        val finalSubtitles = subtitles.map { sub ->
+            var fixedUrl = sub.url
+            if (fixedUrl.contains("*") && videoUrlHost != null) {
+                try {
+                    val subUri = java.net.URI(fixedUrl)
+                    if (subUri.host?.contains("*") == true) {
+                        fixedUrl = fixedUrl.replace(subUri.host, videoUrlHost)
+                    }
+                } catch (e: Exception) {}
+            }
+            if (sessionId != null) {
+                sub.copy(url = com.lagradost.player.impl.proxy.LocalStreamProxy.buildProxyUrl(sessionId, fixedUrl))
+            } else {
+                sub.copy(url = fixedUrl)
+            }
         }
 
+        val capturedHandle = handle
         kotlin.concurrent.thread(isDaemon = true) {
             var attempts = 0
             while (attempts < 150) {
-                val posStr = lib.mpv_get_property_string(handle, "time-pos")
+                // Guard: mpv handle may be destroyed if user navigates away quickly.
+                // Calling mpv_get_property_string on a freed handle causes JNA Invalid memory access.
+                if (mpvHandle == null) break
+                val posStr = try {
+                    lib.mpv_get_property_string(capturedHandle, "time-pos")
+                } catch (e: Error) {
+                    break // JNA native crash guard — handle was freed
+                }
                 if ((posStr?.toDoubleOrNull() ?: 0.0) > 0.0) break
                 Thread.sleep(200)
                 attempts++
             }
 
             val defaultSub = finalSubtitles.firstOrNull()
-            if (defaultSub != null) {
+            if (defaultSub != null && mpvHandle != null) {
                 val escapedSub = defaultSub.url.replace("\\", "\\\\").replace("\"", "\\\"")
                 val escapedTitle = defaultSub.lang.replace("\\", "\\\\").replace("\"", "\\\"")
-                lib.mpv_command_string(handle, "sub-add \"$escapedSub\" select \"$escapedTitle\"")
+                try {
+                    lib.mpv_command_string(capturedHandle, "sub-add \"$escapedSub\" select \"$escapedTitle\"")
+                } catch (e: Error) {
+                    // handle freed, ignore
+                }
             }
         }
     }

@@ -66,6 +66,36 @@ fun lightDesktopColors(accent: Color) = DesktopThemeColors(
 
 val LocalDesktopTheme = staticCompositionLocalOf<DesktopThemeColors> { error("No DesktopTheme provided") }
 
+@Composable
+fun AppDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    offset: androidx.compose.ui.unit.DpOffset = androidx.compose.ui.unit.DpOffset(0.dp, 0.dp),
+    content: @Composable ColumnScope.() -> Unit
+) {
+    // AWT Hack: Prevent this specific popup from stealing window focus,
+    // which breaks exclusive fullscreen.
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            kotlinx.coroutines.delay(100) // Wait for JWindow to be created and mapped by AWT
+            java.awt.Window.getWindows().forEach { w ->
+                if ((w is javax.swing.JWindow || w is javax.swing.JDialog) && w !is androidx.compose.ui.awt.ComposeWindow) {
+                    w.focusableWindowState = false
+                }
+            }
+        }
+    }
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        offset = offset,
+        properties = androidx.compose.ui.window.PopupProperties(focusable = false),
+        content = content
+    )
+}
+
 object DesktopUi {
     val Accent: Color
         @Composable @ReadOnlyComposable

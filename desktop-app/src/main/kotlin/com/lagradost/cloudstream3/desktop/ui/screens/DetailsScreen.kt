@@ -30,8 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.desktop.ui.navigation.NavController
+import com.lagradost.cloudstream3.desktop.ui.components.AppDropdownMenu
+import com.lagradost.cloudstream3.desktop.ui.components.DesktopThemeColors.*
 import com.lagradost.cloudstream3.desktop.ui.screens.details.*
 import com.lagradost.common.storage.WatchHistory
 import com.lagradost.player.impl.PlayerLinkHandler
@@ -340,7 +343,7 @@ fun DetailsContent(navController: NavController, provider: MainAPI, data: LoadRe
                                                         Spacer(Modifier.width(8.dp))
                                                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Season")
                                                     }
-                                                    DropdownMenu(
+                                                    AppDropdownMenu(
                                                         expanded = expanded,
                                                         onDismissRequest = { expanded = false },
                                                         modifier = Modifier.heightIn(max = 300.dp),
@@ -373,7 +376,7 @@ fun DetailsContent(navController: NavController, provider: MainAPI, data: LoadRe
                                                         Spacer(Modifier.width(8.dp))
                                                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Episodes")
                                                     }
-                                                    DropdownMenu(
+                                                    AppDropdownMenu(
                                                         expanded = expandedChunk,
                                                         onDismissRequest = { expandedChunk = false },
                                                         modifier = Modifier.heightIn(max = 300.dp),
@@ -431,7 +434,7 @@ fun DetailsContent(navController: NavController, provider: MainAPI, data: LoadRe
                                                         Spacer(Modifier.width(8.dp))
                                                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Dub")
                                                     }
-                                                    DropdownMenu(
+                                                    AppDropdownMenu(
                                                         expanded = expanded,
                                                         onDismissRequest = { expanded = false },
                                                         modifier = Modifier.heightIn(max = 300.dp),
@@ -464,7 +467,7 @@ fun DetailsContent(navController: NavController, provider: MainAPI, data: LoadRe
                                                         Spacer(Modifier.width(8.dp))
                                                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Episodes")
                                                     }
-                                                    DropdownMenu(
+                                                    AppDropdownMenu(
                                                         expanded = expandedChunk,
                                                         onDismissRequest = { expandedChunk = false },
                                                         modifier = Modifier.heightIn(max = 300.dp),

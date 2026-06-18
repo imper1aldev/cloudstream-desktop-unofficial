@@ -1,20 +1,13 @@
 # CloudStream Desktop (Unofficial Client)
 
-> *"This entire repository is purely vibecoded. Not one line of code here was actually written by a human lol. It's basically a duct-tape edition that somehow works, and I don't have the tiniest idea how this is working."*
+> *"This is a development branch. Fixes are actively being made, and this branch may contain unstable duct-tape code."*
 
 Welcome to the **CloudStream Desktop** project.
+This is a native Compose for Desktop application designed to run CloudStream Android plugins natively on a desktop JVM environment.
 
-This is a native Compose for Desktop application designed to run CloudStream Android plugins natively on a desktop JVM environment, without requiring an Android emulator.
-
-## ⚠️ Disclaimer & No Guarantees
-
-**This is an independent, unofficial experiment.** 
-This project is **not** endorsed by, associated with, or maintained by the original CloudStream developers. It was built as a proof-of-concept to validate the execution of Android-specific plugins within a desktop JVM environment.
-
-**No Guarantees Provided:** 
-There is no guarantee of ongoing maintenance, bug fixes, or future updates for this repository. The codebase is provided "as is," without warranty of any kind. Users are encouraged to fork, modify, and improve the codebase independently.
-
-## 📜 DMCA Notice
+## ⚠️ Development Branch
+**This is the enhancement/development branch.**
+Code here is actively being worked on. Do not expect stability. No guarantees of ongoing maintenance.
 
 **This repository acts purely as a blank-slate media shell.** 
 The application does not ship with any plugins, media files, or pre-configured content sources. Everything must be explicitly installed and configured by the user at their own discretion. The developers of this application do not host, distribute, or control any content, and hold no responsibility or liability for how users choose to utilize this software.

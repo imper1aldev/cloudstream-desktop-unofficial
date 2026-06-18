@@ -4,6 +4,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkPlayList
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import java.io.File
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * Normalizes ExtractorLink data for external players (MPV / VLC).
@@ -23,6 +24,7 @@ object PlayerLinkHandler {
         val useUrlFile: Boolean,
         val audioTracks: List<com.lagradost.cloudstream3.AudioFile> = emptyList(),
         val proxySessionId: String? = null,
+        val clearKeyHex: String? = null,
     )
 
     enum class StreamKind {
@@ -31,6 +33,7 @@ object PlayerLinkHandler {
         PROGRESSIVE,
     }
 
+    @kotlin.OptIn(kotlin.uuid.ExperimentalUuidApi::class, com.lagradost.cloudstream3.Prerelease::class)
     fun validate(link: ExtractorLink, explicitTitle: String? = null): Result<ValidatedLink> {
         // --- Handle ExtractorLinkPlayList (concatenated chunk streams) ---
         // These have url="" but provide a list of chunk URLs + durations.
@@ -88,7 +91,7 @@ object PlayerLinkHandler {
             url
         }
 
-        val finalHeaders = if (useProxy) emptyMap() else headers
+        val finalHeaders = headers
 
         val display = sanitizeDisplayTitle(explicitTitle?.takeIf { it.isNotBlank() } ?: link.name)
 
@@ -111,6 +114,23 @@ object PlayerLinkHandler {
         } else {
             link.audioTracks
         }
+        var clearKeyHex: String? = null
+        if (link is com.lagradost.cloudstream3.utils.DrmExtractorLink) {
+            val isClearKey = link.uuid == com.lagradost.cloudstream3.utils.CLEARKEY_DRM_UUID
+            if (isClearKey && !link.key.isNullOrBlank()) {
+                clearKeyHex = try {
+                    val decoded = java.util.Base64.getUrlDecoder().decode(link.key!!)
+                    decoded.joinToString("") { "%02x".format(it) }
+                } catch(e: Exception) {
+                    try {
+                        val decoded = java.util.Base64.getDecoder().decode(link.key!!)
+                        decoded.joinToString("") { "%02x".format(it) }
+                    } catch(e2: Exception) {
+                        null
+                    }
+                }
+            }
+        }
 
         return Result.success(
             ValidatedLink(
@@ -122,6 +142,7 @@ object PlayerLinkHandler {
                 useUrlFile = !useProxy && (finalUrl.length > 1800 || finalUrl.count { it == '&' } > 8),
                 audioTracks = finalAudioTracks,
                 proxySessionId = finalSessionId,
+                clearKeyHex = clearKeyHex,
             ),
         )
     }
@@ -134,6 +155,30 @@ object PlayerLinkHandler {
                 merged[key] = cleaned
             }
         }
+        
+        // Inject cookies from the global app OkHttp cookie jar
+        try {
+            val urlObj = try {
+                link.url.toHttpUrlOrNull()
+            } catch (e: Exception) {
+                null
+            }
+            if (urlObj != null) {
+                val cookies = com.lagradost.cloudstream3.app.baseClient.cookieJar.loadForRequest(urlObj)
+                if (cookies.isNotEmpty()) {
+                    val cookieStr = cookies.joinToString("; ") { "${it.name}=${it.value}" }
+                    val existingCookieKey = merged.keys.firstOrNull { it.equals("Cookie", ignoreCase = true) }
+                    if (existingCookieKey != null) {
+                        merged[existingCookieKey] = "${merged[existingCookieKey]}; $cookieStr"
+                    } else {
+                        merged["Cookie"] = cookieStr
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            com.lagradost.common.logging.AppLogger.e("Failed to inject cookies for MPV", e)
+        }
+
         // Some CDNs strictly require a browser User-Agent and will throw HTTP 403/404
         // if they see 'mpv' or 'lavf' as the user agent, or if the UA doesn't match the token.
         // We MUST fallback to the exact same CloudStream USER_AGENT used by the plugins

@@ -10,8 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.lagradost.cloudstream3.desktop.network.DohProvider
 import com.lagradost.cloudstream3.desktop.network.NetworkConfig
+import com.lagradost.cloudstream3.desktop.ui.components.AppDropdownMenu
 import com.lagradost.common.storage.DesktopDataStore
 
 @Composable
@@ -46,7 +48,7 @@ fun SettingsNetwork() {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
                     }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         DohProvider.values().forEachIndexed { index, provider ->
                             DropdownMenuItem(
                                 text = { Text(provider.title) },

@@ -50,6 +50,7 @@ logs/
 # Scratch Test Files
 test_*.kt
 test_*.kts
+cloudstream_mpv_url_*
 test-repos/
 .gemini/
 

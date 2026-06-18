@@ -20,12 +20,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.PopupProperties
 import com.lagradost.cloudstream3.AnimeLoadResponse
 import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
+import com.lagradost.cloudstream3.desktop.ui.components.AppDropdownMenu
 
 @Composable
 fun EpisodesOverlay(
@@ -81,6 +85,7 @@ fun EpisodesOverlay(
             .fillMaxHeight()
             .width(400.dp)
             .background(Color(0xFF0F0F16)) // Dark bluish/black exact to screenshot
+            .pointerInput(Unit) { detectTapGestures(onTap = {}, onDoubleTap = {}) }
             .padding(24.dp),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -92,6 +97,25 @@ fun EpisodesOverlay(
             }
 
             if (loadResponse != null) {
+                // Backdrop or Poster
+                val headerImg = loadResponse.backgroundPosterUrl ?: loadResponse.posterUrl
+                if (headerImg != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .padding(bottom = 16.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    ) {
+                        coil3.compose.AsyncImage(
+                            model = headerImg,
+                            contentDescription = "Show Backdrop",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
                 // Title
                 Text(
                     text = loadResponse.name.uppercase(),
@@ -151,29 +175,87 @@ fun EpisodesOverlay(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        val hasPrev = if (loadResponse is TvSeriesLoadResponse) {
+                            seasons.indexOf(selectedSeason) > 0
+                        } else if (loadResponse is AnimeLoadResponse) {
+                            dubs.indexOf(selectedDub) > 0
+                        } else false
+
+                        val hasNext = if (loadResponse is TvSeriesLoadResponse) {
+                            seasons.indexOf(selectedSeason) < seasons.size - 1
+                        } else if (loadResponse is AnimeLoadResponse) {
+                            dubs.indexOf(selectedDub) < dubs.size - 1
+                        } else false
+
                         Text(
                             text = "< Prev",
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = Color.White.copy(alpha = if (hasPrev) 1f else 0.5f),
                             fontSize = 14.sp,
-                            modifier = Modifier.clickable { /* Prev season */ },
+                            modifier = Modifier.clickable(enabled = hasPrev) {
+                                if (loadResponse is TvSeriesLoadResponse) {
+                                    val idx = seasons.indexOf(selectedSeason)
+                                    if (idx > 0) selectedSeason = seasons[idx - 1]
+                                } else if (loadResponse is AnimeLoadResponse) {
+                                    val idx = dubs.indexOf(selectedDub)
+                                    if (idx > 0) selectedDub = dubs[idx - 1]
+                                }
+                            },
                         )
 
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { /* Show dropdown */ }) {
-                            val selectorText = if (loadResponse is TvSeriesLoadResponse) "Season $selectedSeason" else selectedDub?.name ?: ""
-                            Text(
-                                text = selectorText,
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = Color.White)
+                        var expanded by remember { mutableStateOf(false) }
+                        Box {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { expanded = true }) {
+                                val selectorText = if (loadResponse is TvSeriesLoadResponse) "Season $selectedSeason" else selectedDub?.name ?: ""
+                                Text(
+                                    text = selectorText,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = Color.White)
+                            }
+                            AppDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                                modifier = Modifier.heightIn(max = 300.dp),
+                            ) {
+                                if (loadResponse is TvSeriesLoadResponse) {
+                                    seasons.forEach { season ->
+                                        DropdownMenuItem(
+                                            text = { Text("Season $season", fontWeight = FontWeight.SemiBold) },
+                                            onClick = {
+                                                selectedSeason = season
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                } else if (loadResponse is AnimeLoadResponse) {
+                                    dubs.forEach { dub ->
+                                        DropdownMenuItem(
+                                            text = { Text(dub.name, fontWeight = FontWeight.SemiBold) },
+                                            onClick = {
+                                                selectedDub = dub
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         Text(
                             text = "Next >",
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = Color.White.copy(alpha = if (hasNext) 1f else 0.5f),
                             fontSize = 14.sp,
-                            modifier = Modifier.clickable { /* Next season */ },
+                            modifier = Modifier.clickable(enabled = hasNext) {
+                                if (loadResponse is TvSeriesLoadResponse) {
+                                    val idx = seasons.indexOf(selectedSeason)
+                                    if (idx < seasons.size - 1) selectedSeason = seasons[idx + 1]
+                                } else if (loadResponse is AnimeLoadResponse) {
+                                    val idx = dubs.indexOf(selectedDub)
+                                    if (idx < dubs.size - 1) selectedDub = dubs[idx + 1]
+                                }
+                            },
                         )
                     }
                 }
@@ -185,7 +267,7 @@ fun EpisodesOverlay(
                 ) {
                     items(currentEpisodes) { ep ->
                         val isCurrent = ep.data == launchData.history.episodeId
-                        EpisodeCard(episode = ep, isCurrent = isCurrent, onClick = { onPlayEpisode(ep) })
+                        EpisodeCard(episode = ep, showPosterUrl = loadResponse.posterUrl, isCurrent = isCurrent, onClick = { onPlayEpisode(ep) })
                     }
                 }
             } else {
@@ -198,7 +280,7 @@ fun EpisodesOverlay(
 }
 
 @Composable
-fun EpisodeCard(episode: Episode, isCurrent: Boolean = false, onClick: () -> Unit) {
+fun EpisodeCard(episode: Episode, showPosterUrl: String? = null, isCurrent: Boolean = false, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -216,9 +298,10 @@ fun EpisodeCard(episode: Episode, isCurrent: Boolean = false, onClick: () -> Uni
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.DarkGray),
         ) {
-            if (episode.posterUrl != null) {
+            val fallback = episode.posterUrl ?: showPosterUrl
+            if (fallback != null) {
                 coil3.compose.AsyncImage(
-                    model = episode.posterUrl,
+                    model = fallback,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,

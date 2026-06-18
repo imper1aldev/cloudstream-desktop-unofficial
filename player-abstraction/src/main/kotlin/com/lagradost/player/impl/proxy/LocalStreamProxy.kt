@@ -69,16 +69,12 @@ object LocalStreamProxyState {
 }
 
 object LocalStreamProxy {
-    // Use Kotlin's dynamically scaling IO dispatcher instead of hoarding 500 OS threads
-    private val ProxyIoDispatcher = java.util.concurrent.Executors.newCachedThreadPool().asCoroutineDispatcher()
-
     private var server: io.ktor.server.engine.EmbeddedServer<*, *>? = null
     var port: Int = 0
         private set
 
     data class ProxySession(
         val headers: Map<String, String>,
-        val m3u8Cache: java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<String?>> = java.util.concurrent.ConcurrentHashMap(),
     )
 
     // Capped LRU cache to prevent memory leaks from abandoned video sessions
@@ -143,47 +139,7 @@ object LocalStreamProxy {
         return "http://127.0.0.1:$port/proxy?s=$sessionId&u=$encodedUrl"
     }
 
-    private fun prefetchM3u8(url: String, session: ProxySession, sessionId: String): kotlinx.coroutines.Deferred<String?> {
-        return session.m3u8Cache.computeIfAbsent(url) {
-            GlobalScope.async(ProxyIoDispatcher) {
-                try {
-                    val requestBuilder = okhttp3.Request.Builder().url(url)
-                    session.headers.forEach { (k, v) ->
-                        if (!k.equals("Accept-Encoding", ignoreCase = true)) {
-                            requestBuilder.header(k, v)
-                        }
-                    }
-
-                    var response: okhttp3.Response? = null
-                    for (attempt in 1..4) {
-                        try {
-                            response = proxyClient.newCall(requestBuilder.build()).await()
-                            if (response.isSuccessful) break
-                        } catch (e: Exception) {
-                            if (attempt == 4) return@async null
-                        }
-                        if (response != null && !response.isSuccessful && attempt < 4) {
-                            response.body?.close()
-                            kotlinx.coroutines.delay(200L * attempt)
-                        } else if (response != null && !response.isSuccessful) {
-                            response.body?.close()
-                            return@async null
-                        }
-                    }
-
-                    if (response != null && response.isSuccessful) {
-                        val content = response.body?.string() ?: ""
-                        val finalUrl = response.request.url.toString()
-                        rewriteM3u8(content, finalUrl, session, sessionId)
-                    } else {
-                        null
-                    }
-                } catch (e: Exception) {
-                    null
-                }
-            }
-        }
-    }
+    // prefetchM3u8 removed
 
     private suspend fun handleRequest(call: io.ktor.server.application.ApplicationCall) {
         try {
@@ -203,17 +159,7 @@ object LocalStreamProxy {
                 return
             }
 
-            val cachedDeferred = session.m3u8Cache.remove(url)
-            if (cachedDeferred != null) {
-                val cachedM3u8 = cachedDeferred.await()
-                if (cachedM3u8 != null) {
-                    val bytes = cachedM3u8.toByteArray(Charsets.UTF_8)
-                    call.response.header("Content-Type", "application/vnd.apple.mpegurl")
-                    call.respondBytes(bytes, status = HttpStatusCode.OK)
-                    return
-                }
-            }
-
+            // Removed m3u8Cache check
             val mergedHeaders = session.headers.toMutableMap()
 
             val keysToRemove = mergedHeaders.keys.filter { it.equals("Accept-Encoding", ignoreCase = true) }
@@ -276,7 +222,7 @@ object LocalStreamProxy {
                 url.contains(".m3u", ignoreCase = true) ||
                 rawContentType.contains("mpegurl", ignoreCase = true) ||
                 rawContentType.contains("x-mpegURL", ignoreCase = true) ||
-                withContext(ProxyIoDispatcher) {
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
                     try {
                         val s = response.body?.source()
                         s != null && s.request(7) && s.peek().readUtf8(7) == "#EXTM3U"
@@ -286,8 +232,8 @@ object LocalStreamProxy {
                 }
 
             if (isM3u8) {
-                val m3u8Content = withContext(ProxyIoDispatcher) {
-                    response.body?.string() ?: ""
+                val m3u8Content = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    response.body?.source()?.readUtf8() ?: ""
                 }
                 val finalUrl = response.request.url.toString()
 
@@ -331,20 +277,16 @@ object LocalStreamProxy {
 
                     val buffer = ByteArray(65536) // 64KB chunks
                     try {
-                        while (!ktorChannel.isClosedForWrite) {
-                            val bytesRead = withContext(ProxyIoDispatcher) {
-                                streamSource.read(buffer)
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            var bytesRead: Int
+                            while (streamSource.read(buffer).also { bytesRead = it } != -1) {
+                                ktorChannel.writeFully(buffer, 0, bytesRead)
                             }
-                            if (bytesRead == -1) break
-                            
-                            // Write directly to Ktor. Ktor's internal buffer will automatically suspend this coroutine 
-                            // if it's full (i.e. MPV isn't reading fast enough), applying natural backpressure to the network!
-                            ktorChannel.writeFully(buffer, 0, bytesRead)
                         }
                     } catch (e: Exception) {
                         // Ignored (Client disconnected, e.g. user seeking)
                     } finally {
-                        withContext(ProxyIoDispatcher) {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
                             response.body?.close()
                         }
                     }
@@ -421,8 +363,7 @@ object LocalStreamProxy {
                         val uriMatch = URI_REGEX.find(trim)
                         if (uriMatch != null) {
                             val absolute = resolveUrl(baseUrl, uriMatch.groupValues[1])
-                            val proxyUrl = buildProxyUrl(sessionId, absolute)
-                            lazySubs.add(ProxyTrack(proxyUrl, name, lang))
+                            lazySubs.add(ProxyTrack(absolute, name, lang))
                         }
                         continue
                     }
@@ -435,13 +376,12 @@ object LocalStreamProxy {
                         if (uriMatch != null) {
                             val uri = uriMatch.groupValues[1]
                             val absolute = resolveUrl(baseUrl, uri)
-                            val proxyUrl = buildProxyUrl(sessionId, absolute)
 
                             if (uri == bestAudioUrl) {
-                                val newLine = trim.replace(uriMatch.groupValues[0], "URI=\"$proxyUrl\"")
+                                val newLine = trim.replace(uriMatch.groupValues[0], "URI=\"$absolute\"")
                                 appendLine(newLine)
                             } else {
-                                lazyAudios.add(ProxyTrack(proxyUrl, name, lang))
+                                lazyAudios.add(ProxyTrack(absolute, name, lang))
                             }
                         } else {
                             // If there is no URI, it's embedded in the video stream, keep it
@@ -460,7 +400,7 @@ object LocalStreamProxy {
                             val newLine = trim.replace(URI_REGEX) { result ->
                                 val uri = result.groupValues[1]
                                 val absolute = resolveUrl(baseUrl, uri)
-                                "URI=\"${buildProxyUrl(sessionId, absolute)}\""
+                                "URI=\"$absolute\""
                             }
                             appendLine(newLine)
                         } else {
@@ -470,25 +410,24 @@ object LocalStreamProxy {
                         // URL line
                         if (pendingVariantLine != null) {
                             val absolute = resolveUrl(baseUrl, trim)
-                            val proxyUrl = buildProxyUrl(sessionId, absolute)
 
                             if (trim == bestVariantUrl) {
                                 // Keep this variant in the proxy M3U8
                                 appendLine(pendingVariantLine)
-                                appendLine(proxyUrl)
+                                appendLine(absolute)
                             } else {
                                 // Strip it from the M3U8, but expose it via lazyVideoTracks!
                                 val bwMatch = BW_REGEX.find(pendingVariantLine)
                                 val resMatch = RES_REGEX.find(pendingVariantLine)
                                 val res = resMatch?.groupValues?.get(1) ?: "Unknown"
                                 val name = if (res != "Unknown") "${res}p" else "Variant"
-                                lazyVideoTracks.add(ProxyTrack(proxyUrl, name, "eng"))
+                                lazyVideoTracks.add(ProxyTrack(absolute, name, "eng"))
                             }
                             pendingVariantLine = null
                         } else {
                             // Non-variant URL line (rare in Master playlist, but just in case)
                             val absolute = resolveUrl(baseUrl, trim)
-                            appendLine(buildProxyUrl(sessionId, absolute))
+                            appendLine(absolute)
                         }
                     }
                 }
@@ -516,7 +455,7 @@ object LocalStreamProxy {
                         val newLine = trim.replace(uriRegex) { result ->
                             val uri = result.groupValues[1]
                             val absolute = resolveUrl(baseUrl, uri)
-                            "URI=\"${buildProxyUrl(sessionId, absolute)}\""
+                            "URI=\"$absolute\""
                         }
                         appendLine(newLine)
                     } else {
@@ -525,11 +464,11 @@ object LocalStreamProxy {
                 } else {
                     if (nextLineIsVariantUrl) {
                         val absolute = resolveUrl(baseUrl, trim)
-                        appendLine(buildProxyUrl(sessionId, absolute))
+                        appendLine(absolute)
                         nextLineIsVariantUrl = false
                     } else {
                         val absolute = resolveUrl(baseUrl, trim)
-                        appendLine(buildProxyUrl(sessionId, absolute))
+                        appendLine(absolute)
                     }
                 }
             }
