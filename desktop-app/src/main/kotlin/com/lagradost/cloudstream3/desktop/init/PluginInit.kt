@@ -52,6 +52,7 @@ private fun loadInstalledPlugins() {
     val jarFiles = extensionsDir.walkTopDown()
         .filter { it.isFile && (it.extension == "jar" || it.extension == "cs3") }
         .filter { !it.name.endsWith("-jvm.jar") }
+        .sortedBy { it.lastModified() }
         .toList()
 
     if (jarFiles.isEmpty()) {
@@ -59,17 +60,33 @@ private fun loadInstalledPlugins() {
         return
     }
 
+    val retryQueue = mutableListOf<java.io.File>()
     var loaded = 0
     var failed = 0
+    
+    // First pass
     for (jarFile in jarFiles) {
         try {
             ExtensionLoader.loadAndInit(jarFile)
             loaded++
         } catch (e: Throwable) {
-            failed++
-            AppLogger.e("Failed to load plugin ${jarFile.name}: ${e.message}")
+            // Likely a NoClassDefFoundError due to arbitrary load order. Queue for retry.
+            retryQueue.add(jarFile)
+            AppLogger.e("Deferred loading of ${jarFile.name} (dependency not met yet?)")
         }
     }
+
+    // Second pass for plugins that depend on others
+    for (jarFile in retryQueue) {
+        try {
+            ExtensionLoader.loadAndInit(jarFile)
+            loaded++
+        } catch (e: Throwable) {
+            failed++
+            AppLogger.e("Failed to load plugin ${jarFile.name} even after retry: ${e.message}")
+        }
+    }
+    
     AppLogger.i("Plugin loading complete: $loaded loaded, $failed failed (of ${jarFiles.size} total)")
 }
 

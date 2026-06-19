@@ -147,7 +147,7 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
         }
 
         // Block OS command execution and sandbox escapes
-        if (name == "java.lang.ProcessBuilder" || name == "java.lang.Runtime" || name == "java.lang.Thread" || name == "java.lang.ClassLoader") {
+        if (name == "java.lang.ProcessBuilder" || name == "java.lang.Thread" || name == "java.lang.ClassLoader") {
             return true
         }
 

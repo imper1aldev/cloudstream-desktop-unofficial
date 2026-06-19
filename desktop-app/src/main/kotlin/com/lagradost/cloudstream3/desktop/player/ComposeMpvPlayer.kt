@@ -64,6 +64,7 @@ fun ComposeMpvPlayer(
                 var lastPeriodicUpdate = 0L
 
                 while (isActive) {
+                    try {
                     // Block IO thread for up to 200ms waiting for an event. 
                     // This allows instant response (0ms latency) if an event arrives!
                     val eventPtr = MpvLibrary.INSTANCE.mpv_wait_event(h, 0.2)
@@ -198,7 +199,12 @@ fun ComposeMpvPlayer(
                         val isSeekable = seekableStr == "yes"
                         if (isSeekable) {
                             // Normal VOD stream — genuinely finished
-                            if (hasEverPlayed) {
+                            // If it finished suspiciously fast (under 2 seconds), it's a dead/corrupt stream
+                            // that MPV instantly skipped to the end of due to bad packets.
+                            val timeSinceLoad = System.currentTimeMillis() - loadStartTime
+                            if (timeSinceLoad < 2000) {
+                                currentOnPlaybackError("Stream is empty or corrupt.")
+                            } else if (hasEverPlayed) {
                                 currentOnFinished()
                             } else {
                                 currentOnPlaybackError("Stream failed to load or instantly ended.")
@@ -237,6 +243,13 @@ fun ComposeMpvPlayer(
                         currentOnPlaybackError("Connection timed out. The stream might be dead or too slow.")
                         break
                     }
+                    }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        break // Normal coroutine cancellation
+                    } catch (e: Throwable) {
+                        com.lagradost.common.logging.AppLogger.e("MPV event loop non-fatal error: ${e.message}")
+                        kotlinx.coroutines.delay(100) // Prevent tight loop crash spam
+                        continue
                     }
                 }
             }
@@ -460,6 +473,7 @@ fun ComposeMpvPlayer(
                 mpvHandle = handle
                 playerState?.attachMpv(handle)
 
+                // Disable native UI since we draw our own Compose UI
                 lib.mpv_set_option_string(handle, "osc", "no")
                 lib.mpv_set_option_string(handle, "osd-level", "0")
                 lib.mpv_set_option_string(handle, "osd-bar", "no")
@@ -540,7 +554,7 @@ fun ComposeMpvPlayer(
                                     "up" -> MpvLibrary.INSTANCE.mpv_command_string(h, "add volume 5")
                                     "down" -> MpvLibrary.INSTANCE.mpv_command_string(h, "add volume -5")
                                     "m" -> MpvLibrary.INSTANCE.mpv_command_string(h, "cycle mute")
-                                    "f", "f11" -> currentOnFullscreenToggle?.invoke()
+                                    "f" -> currentOnFullscreenToggle?.invoke()
                                     else -> {
                                         // MpvLibrary.INSTANCE.mpv_command_string(h, "keydown $mpvKey")
                                     }

@@ -61,18 +61,23 @@ class CloudflareKiller : Interceptor {
         return builder.build()
     }
 
-    override fun intercept(chain: Interceptor.Chain): Response = runBlocking {
+    /**
+     * Intercept method that does NOT use runBlocking on the hot path.
+     * Only the rare Cloudflare bypass triggers runBlocking to avoid
+     * exhausting OkHttp's thread pool when plugins fire many parallel requests.
+     */
+    override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val host = request.url.host
 
         // If we already have cookies for this host, use them directly (skip the initial request)
         if (savedCookies.containsKey(host)) {
-            return@runBlocking proceed(chain, request, savedCookies[host] ?: emptyMap(), savedUserAgents[host])
+            return proceed(chain, request, savedCookies[host] ?: emptyMap(), savedUserAgents[host])
         }
 
         // If this host already failed bypass, don't waste time — just proceed normally
         if (failedHosts.contains(host)) {
-            return@runBlocking chain.proceed(request)
+            return chain.proceed(request)
         }
 
         val response = chain.proceed(request)
@@ -88,22 +93,25 @@ class CloudflareKiller : Interceptor {
             contentType.contains("text/html", ignoreCase = true)
 
         if (!isCloudflareChallenge) {
-            return@runBlocking response
+            return response
         }
 
         response.close()
 
-        // Don't launch Playwright if another coroutine is already resolving this host
+        // Don't launch Playwright if another thread is already resolving this host
         if (!resolvingHosts.add(host)) {
             AppLogger.d("$TAG: Already resolving $host, skipping duplicate")
             // Make a fresh request instead of returning closed response
-            return@runBlocking chain.proceed(request)
+            return chain.proceed(request)
         }
 
+        // Only use runBlocking for the actual Cloudflare bypass (rare path)
         try {
-            val bypassed = bypassCloudflare(chain, request)
+            val bypassed = runBlocking {
+                bypassCloudflare(chain, request)
+            }
             if (bypassed != null) {
-                return@runBlocking bypassed
+                return bypassed
             }
         } finally {
             resolvingHosts.remove(host)
@@ -114,7 +122,7 @@ class CloudflareKiller : Interceptor {
         AppLogger.w("$TAG: Failed to bypass Cloudflare for $host (will not retry this session)")
 
         // Make a FRESH request since the original response was closed
-        return@runBlocking chain.proceed(request)
+        return chain.proceed(request)
     }
 
     private fun proceed(chain: Interceptor.Chain, request: Request, cookies: Map<String, String>, userAgent: String?): Response {

@@ -223,6 +223,8 @@ fun EmbeddedVideoPlayer(
                     androidx.compose.runtime.LaunchedEffect(windowState?.position) {
                         // Only hide the UI during movement if we are NOT in fullscreen mode.
                         // This prevents destroying the Popup during the transition to (0,0) fullscreen.
+                        // If we destroy and respawn the Popup during the fullscreen transition, Windows OS
+                        // will detect a new window spawning and forcefully drop the main app out of fullscreen!
                         if (windowState?.placement != androidx.compose.ui.window.WindowPlacement.Fullscreen) {
                             isWindowMoving = true
                             kotlinx.coroutines.delay(100) // 100ms debounce

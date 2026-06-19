@@ -41,10 +41,14 @@ interface MpvLibrary : Library {
 
     companion object {
         fun getPropertyString(ctx: Pointer, name: String): String? {
-            val ptr = INSTANCE.mpv_get_property_string(ctx, name) ?: return null
-            val str = ptr.getString(0)
-            INSTANCE.mpv_free(ptr)
-            return str
+            return try {
+                val ptr = INSTANCE.mpv_get_property_string(ctx, name) ?: return null
+                val str = ptr.getString(0)
+                INSTANCE.mpv_free(ptr)
+                str
+            } catch (t: Throwable) {
+                null
+            }
         }
 
         val INSTANCE: MpvLibrary by lazy {

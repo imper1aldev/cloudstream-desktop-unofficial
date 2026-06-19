@@ -74,18 +74,6 @@ fun AppDropdownMenu(
     offset: androidx.compose.ui.unit.DpOffset = androidx.compose.ui.unit.DpOffset(0.dp, 0.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // AWT Hack: Prevent this specific popup from stealing window focus,
-    // which breaks exclusive fullscreen.
-    LaunchedEffect(expanded) {
-        if (expanded) {
-            kotlinx.coroutines.delay(100) // Wait for JWindow to be created and mapped by AWT
-            java.awt.Window.getWindows().forEach { w ->
-                if ((w is javax.swing.JWindow || w is javax.swing.JDialog) && w !is androidx.compose.ui.awt.ComposeWindow) {
-                    w.focusableWindowState = false
-                }
-            }
-        }
-    }
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,

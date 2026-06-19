@@ -39,6 +39,7 @@ class PlayerState {
     val showStats = MutableStateFlow(false)
 
     private var mpvHandle: com.sun.jna.Pointer? = null
+    private var lastSeekTime = 0L
 
     fun attachMpv(handle: com.sun.jna.Pointer) {
         mpvHandle = handle
@@ -74,6 +75,7 @@ class PlayerState {
 
     fun seekTo(positionMs: Long) {
         mpvHandle?.let {
+            lastSeekTime = System.currentTimeMillis()
             val posSec = positionMs / 1000.0
             MpvLibrary.INSTANCE.mpv_set_property_string(it, "time-pos", posSec.toString())
             this.positionMs.value = positionMs
@@ -82,8 +84,17 @@ class PlayerState {
 
     fun seekBy(offsetMs: Long) {
         mpvHandle?.let {
+            lastSeekTime = System.currentTimeMillis()
             val offsetSec = offsetMs / 1000.0
             MpvLibrary.INSTANCE.mpv_command_string(it, "seek $offsetSec relative")
+        }
+    }
+
+    // Called by the native event observer loop
+    // Debounced to prevent stale time-pos events in the MPV queue from reverting the slider visually right after a seek
+    fun updatePositionFromPlayer(posMs: Long) {
+        if (System.currentTimeMillis() - lastSeekTime > 500L) {
+            this.positionMs.value = posMs
         }
     }
 

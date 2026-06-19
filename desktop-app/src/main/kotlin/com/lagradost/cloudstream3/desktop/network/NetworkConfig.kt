@@ -34,27 +34,12 @@ object NetworkConfig {
         val providerIndex = DesktopDataStore.getKey<Int>(PREF_DOH_PROVIDER) ?: 0
         val provider = DohProvider.values().getOrNull(providerIndex) ?: DohProvider.NONE
 
-        val baseBuilder = OkHttpClient.Builder()
+        val baseBuilder = app.baseClient.newBuilder()
             .followRedirects(true)
             .followSslRedirects(true)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-
-        try {
-            // Sort IPv4 first to bypass OkHttp's faulty Happy Eyeballs implementation on Windows
-            baseBuilder.dns(object : okhttp3.Dns {
-                override fun lookup(hostname: String): List<java.net.InetAddress> {
-                    val addresses = okhttp3.Dns.SYSTEM.lookup(hostname)
-                    return addresses.sortedBy { if (it is java.net.Inet4Address) 0 else 1 }
-                }
-            })
-        } catch (e: Exception) {
-            AppLogger.e("Failed to initialize custom DNS: ${e.message}", e)
-        }
-
-        // Apply CloudflareKiller interceptor
-        baseBuilder.addInterceptor(CloudflareKiller())
 
         // Apply DoH Provider
         when (provider) {
@@ -66,6 +51,31 @@ object NetworkConfig {
             DohProvider.DNSSB -> baseBuilder.addDnsSbDns()
             DohProvider.CANADIAN_SHIELD -> baseBuilder.addCanadianShieldDns()
             DohProvider.NONE -> { /* Use System DNS */ }
+        }
+
+        // Apply CloudflareKiller interceptor only if not already present
+        // (since we inherit from app.baseClient.newBuilder(), a previous call may have added one)
+        val hasCloudflareKiller = baseBuilder.interceptors().any { it is CloudflareKiller }
+        if (!hasCloudflareKiller) {
+            baseBuilder.addInterceptor(CloudflareKiller())
+        }
+
+        // CRITICAL: Strip all IPv6 addresses from DNS responses.
+        // Windows frequently advertises IPv6 capability but many ISPs/routers silently
+        // blackhole IPv6 traffic, causing OkHttp's Happy Eyeballs to hang for 30+ seconds
+        // on hosts like HubCloud before falling back to IPv4.
+        // This wraps whatever DNS is currently configured (System or DoH).
+        try {
+            val upstreamDns = baseBuilder.build().dns
+            baseBuilder.dns(object : okhttp3.Dns {
+                override fun lookup(hostname: String): List<java.net.InetAddress> {
+                    val addresses = upstreamDns.lookup(hostname)
+                    val ipv4Only = addresses.filter { it is java.net.Inet4Address }
+                    return ipv4Only.ifEmpty { addresses } // fallback to all if no IPv4 exists
+                }
+            })
+        } catch (e: Exception) {
+            AppLogger.e("Failed to configure IPv4-only DNS: ${e.message}", e)
         }
 
         // Apply to main client

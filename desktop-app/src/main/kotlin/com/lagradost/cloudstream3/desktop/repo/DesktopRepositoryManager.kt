@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -101,6 +103,7 @@ object DesktopRepositoryManager {
         }
     }
 
+    @Synchronized
     private fun writeRepositoriesToDisk(repos: List<RepositoryData>) {
         reposFile.parentFile?.mkdirs()
         mapper.writeValue(reposFile, repos)
@@ -113,6 +116,7 @@ object DesktopRepositoryManager {
         return data.copy(iconUrl = icon, name = name)
     }
 
+    @Synchronized
     fun saveRepository(repository: RepositoryData) {
         val incoming = normalizeRepositoryData(repository)
         val current = readRepositoriesFromDisk().toMutableList()
@@ -129,6 +133,7 @@ object DesktopRepositoryManager {
         writeRepositoriesToDisk(current.distinctBy { it.url })
     }
 
+    @Synchronized
     fun removeRepository(url: String) {
         val current = readRepositoriesFromDisk().filter { it.url != url }
         writeRepositoriesToDisk(current)
@@ -414,25 +419,37 @@ object DesktopRepositoryManager {
     }
 
     suspend fun refreshAllRepositoryMetadata(): Int = withContext(Dispatchers.IO) {
-        val count = java.util.concurrent.atomic.AtomicInteger(0)
+        // Fetch all manifests in parallel but collect results without writing to disk yet
+        val updates = java.util.concurrent.ConcurrentHashMap<String, Pair<String?, String>>()
         coroutineScope {
             getSavedRepositories().map { saved ->
                 async {
                     val manifest = fetchRepository(saved.url) ?: return@async
                     repoCache[saved.url] = manifest
-                    saveRepository(
-                        RepositoryData(
-                            iconUrl = manifest.iconUrl,
-                            name = manifest.name,
-                            url = saved.url,
-                        ),
-                    )
-                    count.incrementAndGet()
+                    updates[saved.url] = Pair(manifest.iconUrl, manifest.name)
                     AppLogger.i("Refreshed repo metadata: ${manifest.name}")
                 }
             }.awaitAll()
         }
-        count.get()
+        // Single synchronized batch-write instead of 26 concurrent read-modify-write cycles
+        if (updates.isNotEmpty()) {
+            synchronized(this@DesktopRepositoryManager) {
+                val current = readRepositoriesFromDisk().toMutableList()
+                for ((url, pair) in updates) {
+                    val (iconUrl, name) = pair
+                    val index = current.indexOfFirst { it.url == url }
+                    if (index >= 0) {
+                        val existing = current[index]
+                        current[index] = existing.copy(
+                            name = if (name.isNotBlank() && name != url) name else existing.name,
+                            iconUrl = iconUrl ?: existing.iconUrl,
+                        )
+                    }
+                }
+                writeRepositoriesToDisk(current.distinctBy { it.url })
+            }
+        }
+        updates.size
     }
 
     suspend fun rebuildRemotePluginCatalog(): Int = withContext(Dispatchers.IO) {
@@ -548,25 +565,29 @@ object DesktopRepositoryManager {
         return list.distinctBy { it.second.internalName }
     }
 
+    private val syncMutex = Mutex()
+
     suspend fun syncAll(): SyncReport = withContext(Dispatchers.IO) {
-        AppLogger.i("=== Desktop sync started ===")
-        clearCaches()
+        syncMutex.withLock {
+            AppLogger.i("=== Desktop sync started ===")
+            clearCaches()
 
-        val reposRefreshed = refreshAllRepositoryMetadata()
-        val catalogPlugins = rebuildRemotePluginCatalog()
-        val pluginsUpdated = autoUpdatePlugins()
-        val newPluginsLoaded = com.lagradost.runtime.loader.ExtensionLoader.rescanAndLoadNewPlugins(getExtensionsDir())
-        val iconsCached = remotePluginIcons.value.size
+            val reposRefreshed = refreshAllRepositoryMetadata()
+            val catalogPlugins = rebuildRemotePluginCatalog()
+            val pluginsUpdated = autoUpdatePlugins()
+            val newPluginsLoaded = com.lagradost.runtime.loader.ExtensionLoader.rescanAndLoadNewPlugins(getExtensionsDir())
+            val iconsCached = remotePluginIcons.value.size
 
-        syncGeneration.value = syncGeneration.value + 1
-        AppLogger.i("=== Desktop sync finished ===")
+            syncGeneration.value = syncGeneration.value + 1
+            AppLogger.i("=== Desktop sync finished ===")
 
-        SyncReport(
-            reposRefreshed = reposRefreshed,
-            catalogPlugins = catalogPlugins,
-            pluginsUpdated = pluginsUpdated.size,
-            iconsCached = iconsCached,
-            newPluginsLoaded = newPluginsLoaded,
-        )
+            SyncReport(
+                reposRefreshed = reposRefreshed,
+                catalogPlugins = catalogPlugins,
+                pluginsUpdated = pluginsUpdated.size,
+                iconsCached = iconsCached,
+                newPluginsLoaded = newPluginsLoaded,
+            )
+        }
     }
 }

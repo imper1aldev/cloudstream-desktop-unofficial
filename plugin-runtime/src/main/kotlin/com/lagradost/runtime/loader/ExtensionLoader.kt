@@ -119,7 +119,7 @@ object ExtensionLoader {
             nativeIntercept
         } else {
             val safeParentLoader = SafePluginClassLoader(this::class.java.classLoader)
-            val classLoader = URLClassLoader(arrayOf(jarToLoad.toURI().toURL()), safeParentLoader)
+            val classLoader = CompatPluginClassLoader(arrayOf(jarToLoad.toURI().toURL()), safeParentLoader)
             val pluginClass = classLoader.loadClass(pluginClassName)
 
             // MegaPlugin VerifiedRepo MixIn injection
@@ -256,6 +256,7 @@ object ExtensionLoader {
         extensionsDir.walkTopDown()
             .filter { it.isFile && (it.extension == "jar" || it.extension == "cs3") }
             .filter { !it.name.endsWith("-jvm.jar") }
+            .sortedBy { it.lastModified() }
             .forEach { jar ->
                 if (!isPluginLoaded(jar.absolutePath)) {
                     try {
