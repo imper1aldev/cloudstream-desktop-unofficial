@@ -14,16 +14,8 @@ object PlayerConfig {
     const val PREF_INTERPOLATION = "player_interpolation_enabled"
 
     fun applyMpvSettings(handle: Pointer, lib: MpvLibrary) {
-        // CRITICAL WINDOWS RENDERING FIXES:
-        // When MPV is embedded inside a Java AWT Canvas (child window), Windows DXGI flip-model 
-        // presentation (the default) causes severe frame pacing issues, making the video play in 
-        // slow motion while audio continues perfectly. We MUST disable flip-model for embedded windows.
-        lib.mpv_set_option_string(handle, "d3d11-flip", "no")
-        lib.mpv_set_option_string(handle, "gpu-context", "d3d11")
-
-        // Hardware Acceleration (Default: auto-copy for embedded rendering safety)
-        var hwdec = DesktopDataStore.getKey<String>(PREF_HWDEC) ?: "auto-copy"
-        if (hwdec == "auto-safe") hwdec = "auto-copy" // Force migration from unsafe default
+        // Hardware Acceleration (Default: auto-safe for VRAM rendering)
+        val hwdec = DesktopDataStore.getKey<String>(PREF_HWDEC) ?: "auto-safe"
         lib.mpv_set_option_string(handle, "hwdec", hwdec)
 
         // Subtitles Size (Default: 45)
@@ -43,8 +35,8 @@ object PlayerConfig {
         lib.mpv_set_option_string(handle, "ytdl-format", ytdlFormat)
 
         // Verbose Logging for Dev Console
-        lib.mpv_set_option_string(handle, "msg-level", "all=v")
-        lib.mpv_set_option_string(handle, "terminal", "yes")
+        lib.mpv_set_option_string(handle, "msg-level", "all=warn")
+        lib.mpv_set_option_string(handle, "terminal", "no")
 
         // Fast Startup Optimizations
         lib.mpv_set_option_string(handle, "cache", "yes")

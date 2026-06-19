@@ -294,8 +294,12 @@ object LocalStreamProxy {
 
                 val bytes = rewritten.toByteArray(Charsets.UTF_8)
                 
-                // Cache it for subsequent FFmpeg probes to prevent network hit
-                session.masterCache[url] = kotlinx.coroutines.GlobalScope.async { bytes }
+                // Cache it for subsequent FFmpeg probes to prevent network hit,
+                // BUT ONLY if it's a MASTER playlist. Media playlists MUST NOT be cached,
+                // otherwise mpv will never discover new segments for live streams.
+                if (m3u8Content.contains("#EXT-X-STREAM-INF")) {
+                    session.masterCache[url] = kotlinx.coroutines.GlobalScope.async { bytes }
+                }
 
                 call.response.header("Content-Type", "application/vnd.apple.mpegurl")
                 call.respondBytes(bytes, status = HttpStatusCode.OK)
@@ -312,93 +316,33 @@ object LocalStreamProxy {
                     ContentType.Application.OctetStream
                 }
 
-                // CRITICAL ASYNCHRONOUS BUFFERING FIX:
-                // MPV reads from the proxy slowly as its internal buffers fill up. 
-                // If we stream directly (using respondBytesWriter), Ktor suspends when MPV is full.
-                // This stalls the CDN TCP connection. CDNs aggressively drop idle connections (WSAECONNABORTED),
-                // giving MPV a corrupted segment which destroys AV Sync permanently.
-                // SOLUTION: Eagerly load the entire file into RAM if it's a small segment.
-                // Note: CDNs often use Chunked Transfer-Encoding, meaning Content-Length is -1.
-                // We MUST check the URL extension to guarantee segments are buffered in RAM.
-                val isHlsSegment = url.contains(".ts", ignoreCase = true) || 
-                                   url.contains(".m4s", ignoreCase = true) || 
-                                   url.contains(".jpg", ignoreCase = true) || 
-                                   url.contains(".png", ignoreCase = true) || 
-                                   url.contains(".vtt", ignoreCase = true) || 
-                                   (cl in 0..50_000_000L)
-
-                if (isHlsSegment) {
-                    // CRITICAL ASYNCHRONOUS BUFFERING FIX V2:
-                    // We must decouple CDN download speed from MPV consumption speed to prevent timeouts,
-                    // BUT we cannot eagerly load the entire segment before responding because it destroys
-                    // Time-To-First-Byte latency, starving MPV's cache.
-                    // Solution: An UNLIMITED channel. OkHttp dumps data into the channel as fast as the CDN
-                    // allows (never stalling, never timing out). Ktor reads from the channel and sends to MPV
-                    // as soon as chunks arrive, preserving instant TTFB!
-                    val channel = kotlinx.coroutines.channels.Channel<ByteArray>(kotlinx.coroutines.channels.Channel.UNLIMITED)
-                    val streamSource = response.body?.source()
-                    
-                    if (streamSource != null) {
-                        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            var networkError: Throwable? = null
-                            try {
-                                val buffer = ByteArray(65536)
-                                var bytesRead: Int
-                                while (streamSource.read(buffer).also { bytesRead = it } != -1) {
-                                    channel.send(buffer.copyOfRange(0, bytesRead))
-                                }
-                            } catch (e: Exception) {
-                                networkError = e
-                            } finally {
-                                response.body?.close()
-                                channel.close(networkError)
+                // Since OkHttp's readTimeout is robust (60s), we no longer need the unbounded 
+                // channel buffer. Stream directly to Ktor to avoid GC allocation churn from 
+                // array copies.
+                call.respondBytesWriter(
+                    contentType = parsedContentType,
+                    status = HttpStatusCode.fromValue(response.code),
+                    contentLength = contentLengthParam,
+                ) {
+                    val streamSource = response.body?.source() ?: return@respondBytesWriter
+                    val ktorChannel = this
+                    val buffer = ByteArray(65536)
+                    try {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            var bytesRead: Int
+                            while (streamSource.read(buffer).also { bytesRead = it } != -1) {
+                                ktorChannel.writeFully(buffer, 0, bytesRead)
                             }
                         }
-                    } else {
-                        channel.close()
-                    }
-
-                    call.respondBytesWriter(
-                        contentType = parsedContentType,
-                        status = HttpStatusCode.fromValue(response.code),
-                        contentLength = contentLengthParam
-                    ) {
-                        try {
-                            for (chunk in channel) {
-                                writeFully(chunk)
-                            }
-                        } catch (e: Exception) {
-                            // If the background coroutine failed (e.g. timeout), channel.close(e) 
-                            // will cause the for-loop to throw that exact exception here!
-                            // By throwing it again, we FORCE Ktor to abort the TCP socket, 
-                            // telling MPV that the segment download failed so it can retry it!
-                            channel.cancel()
-                            throw e
-                        }
-                    }
-                } else {
-                    // For massive files (like a direct 2GB MP4), stream them to avoid OOM.
-                    call.respondBytesWriter(
-                        contentType = parsedContentType,
-                        status = HttpStatusCode.fromValue(response.code),
-                        contentLength = contentLengthParam,
-                    ) {
-                        val streamSource = response.body?.source() ?: return@respondBytesWriter
-                        val ktorChannel = this
-                        val buffer = ByteArray(65536)
-                        try {
-                            withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                var bytesRead: Int
-                                while (streamSource.read(buffer).also { bytesRead = it } != -1) {
-                                    ktorChannel.writeFully(buffer, 0, bytesRead)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            // Ignored (Client disconnected, e.g. user seeking)
-                        } finally {
-                            withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                response.body?.close()
-                            }
+                    } catch (e: Exception) {
+                        // Crucially, if OkHttp times out or fails mid-stream, re-throw the 
+                        // exception! This forces Ktor to abruptly kill the TCP socket, 
+                        // signaling to MPV that the segment was truncated. MPV's event loop
+                        // catches MPV_END_FILE_REASON_ERROR and retries instead of playing corrupt data.
+                        throw e
+                    } finally {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            response.body?.close()
                         }
                     }
                 }
