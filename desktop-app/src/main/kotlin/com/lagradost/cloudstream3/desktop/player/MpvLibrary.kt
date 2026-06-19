@@ -39,6 +39,18 @@ interface MpvLibrary : Library {
         }
     }
 
+    @Structure.FieldOrder("reason", "error", "playlist_entry_id", "playlist_insert_id", "playlist_insert_num_entries")
+    open class MpvEventEndFile(p: Pointer? = null) : Structure(p) {
+        @JvmField var reason: Int = 0
+        @JvmField var error: Int = 0
+        @JvmField var playlist_entry_id: Long = 0
+        @JvmField var playlist_insert_id: Long = 0
+        @JvmField var playlist_insert_num_entries: Int = 0
+        init {
+            p?.let { read() }
+        }
+    }
+
     companion object {
         fun getPropertyString(ctx: Pointer, name: String): String? {
             return try {

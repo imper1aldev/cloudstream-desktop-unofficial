@@ -9,6 +9,7 @@ class PlayerState {
     val bufferMs = MutableStateFlow(0L)
     val isPaused = MutableStateFlow(false)
     val isBuffering = MutableStateFlow(true)
+    val isProbing = MutableStateFlow(false)
     val volume = MutableStateFlow(100f) // 0 to 130 in MPV usually, let's say 0 to 100
     val playbackSpeed = MutableStateFlow(1.0f)
     val showControls = MutableStateFlow(true)
@@ -180,6 +181,10 @@ class PlayerState {
             // MPV command: audio-add <url> select <title> <lang>
             val cmd = "audio-add \"$safeUrl\" select \"$safeName\" \"$safeLang\""
             MpvLibrary.INSTANCE.mpv_command_string(it, cmd)
+            
+            // Remove from proxy state to prevent TrackRevealer from adding it again and to hide it from UI
+            val proxyState = com.lagradost.player.impl.proxy.LocalStreamProxyState
+            proxyState.lazyAudioTracks.value = proxyState.lazyAudioTracks.value.filter { it.url != track.url }
         }
     }
 
@@ -191,6 +196,9 @@ class PlayerState {
             // MPV command: sub-add <url> select <title> <lang>
             val cmd = "sub-add \"$safeUrl\" select \"$safeName\" \"$safeLang\""
             MpvLibrary.INSTANCE.mpv_command_string(it, cmd)
+
+            val proxyState = com.lagradost.player.impl.proxy.LocalStreamProxyState
+            proxyState.lazySubtitleTracks.value = proxyState.lazySubtitleTracks.value.filter { t -> t.url != track.url }
         }
     }
 
@@ -202,6 +210,9 @@ class PlayerState {
             // MPV command: video-add <url> select <title> <lang>
             val cmd = "video-add \"$safeUrl\" select \"$safeName\" \"$safeLang\""
             MpvLibrary.INSTANCE.mpv_command_string(it, cmd)
+
+            val proxyState = com.lagradost.player.impl.proxy.LocalStreamProxyState
+            proxyState.lazyVideoTracks.value = proxyState.lazyVideoTracks.value.filter { t -> t.url != track.url }
         }
     }
 

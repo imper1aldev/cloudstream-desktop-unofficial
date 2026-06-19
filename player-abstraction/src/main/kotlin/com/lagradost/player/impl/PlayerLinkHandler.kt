@@ -81,11 +81,16 @@ object PlayerLinkHandler {
         // This makes the stream appear as a seamless local HLS feed to MPV.
         // Without this, MPV receives raw tokenized CDN segment URLs which can expire
         // mid-stream, causing broken-pieces playback.
-        val useProxy = kind == StreamKind.HLS
+        // We also route PROGRESSIVE/DASH streams through the proxy to prevent FFmpeg from 
+        // sending HTTP HEAD requests directly to Cloudflare Workers, which often results in 403 Forbidden.
+        val useProxy = true
         var finalSessionId: String? = null
         val finalUrl = if (useProxy) {
             val sessionId = com.lagradost.player.impl.proxy.LocalStreamProxy.registerSession(headers)
             finalSessionId = sessionId
+            if (link.isM3u8 || link.type == ExtractorLinkType.M3U8 || url.contains(".m3u8")) {
+                com.lagradost.player.impl.proxy.LocalStreamProxy.prefetchM3u8(sessionId, url)
+            }
             com.lagradost.player.impl.proxy.LocalStreamProxy.buildProxyUrl(sessionId, url)
         } else {
             url

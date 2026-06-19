@@ -75,6 +75,7 @@ object LocalStreamProxy {
 
     data class ProxySession(
         val headers: Map<String, String>,
+        val masterCache: java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<ByteArray>> = java.util.concurrent.ConcurrentHashMap(),
     )
 
     // Capped LRU cache to prevent memory leaks from abandoned video sessions
@@ -88,8 +89,8 @@ object LocalStreamProxy {
 
     private val proxyClient by lazy {
         app.baseClient.newBuilder()
-            .connectTimeout(5000L, java.util.concurrent.TimeUnit.MILLISECONDS)
-            .readTimeout(15000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .connectTimeout(15000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .readTimeout(60000L, java.util.concurrent.TimeUnit.MILLISECONDS)
             .dispatcher(
                 okhttp3.Dispatcher().apply {
                     maxRequests = 64
@@ -139,8 +140,49 @@ object LocalStreamProxy {
         return "http://127.0.0.1:$port/proxy?s=$sessionId&u=$encodedUrl"
     }
 
-    // prefetchM3u8 removed
+    fun prefetchM3u8(sessionId: String, url: String) {
+        val session = sessions[sessionId] ?: return
+        if (session.masterCache.containsKey(url)) return
 
+        val deferred = GlobalScope.async(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val requestBuilder = okhttp3.Request.Builder().url(url)
+                val mergedHeaders = session.headers.toMutableMap()
+                val keysToRemove = mergedHeaders.keys.filter { it.equals("Accept-Encoding", ignoreCase = true) }
+                keysToRemove.forEach { mergedHeaders.remove(it) }
+                mergedHeaders["Accept-Encoding"] = "identity"
+                mergedHeaders.forEach { (k, v) -> requestBuilder.header(k, v) }
+
+                var response: okhttp3.Response? = null
+                for (attempt in 1..4) {
+                    try {
+                        response = proxyClient.newCall(requestBuilder.build()).await()
+                        if (response.isSuccessful) break
+                    } catch (e: Exception) {}
+                    if (attempt < 4) {
+                        response?.body?.close()
+                        kotlinx.coroutines.delay(200L * attempt)
+                    }
+                }
+
+                if (response == null || !response.isSuccessful) {
+                    response?.body?.close()
+                    throw Exception("Prefetch HTTP failed")
+                }
+
+                val m3u8Content = response.body?.source()?.readUtf8() ?: ""
+                val finalUrl = response.request.url.toString()
+                response.body?.close()
+
+                val rewritten = rewriteM3u8(m3u8Content, finalUrl, session, sessionId)
+                rewritten.toByteArray(Charsets.UTF_8)
+            } catch (e: Exception) {
+                AppLogger.e("Prefetch failed for $url", e)
+                ByteArray(0)
+            }
+        }
+        session.masterCache[url] = deferred
+    }
     private suspend fun handleRequest(call: io.ktor.server.application.ApplicationCall) {
         try {
             val sessionId = call.request.queryParameters["s"]
@@ -159,7 +201,18 @@ object LocalStreamProxy {
                 return
             }
 
-            // Removed m3u8Cache check
+            // Check if we have an exact cache hit for the exact URL (useful for m3u8 requests)
+            val cachedDeferred = session.masterCache[url]
+            if (cachedDeferred != null) {
+                val bytes = cachedDeferred.await()
+                if (bytes.isNotEmpty()) {
+                    call.response.header("Content-Type", "application/vnd.apple.mpegurl")
+                    call.respondBytes(bytes, status = HttpStatusCode.OK)
+                    return
+                }
+                session.masterCache.remove(url)
+            }
+
             val mergedHeaders = session.headers.toMutableMap()
 
             val keysToRemove = mergedHeaders.keys.filter { it.equals("Accept-Encoding", ignoreCase = true) }
@@ -240,6 +293,9 @@ object LocalStreamProxy {
                 val rewritten = rewriteM3u8(m3u8Content, finalUrl, session, sessionId)
 
                 val bytes = rewritten.toByteArray(Charsets.UTF_8)
+                
+                // Cache it for subsequent FFmpeg probes to prevent network hit
+                session.masterCache[url] = kotlinx.coroutines.GlobalScope.async { bytes }
 
                 call.response.header("Content-Type", "application/vnd.apple.mpegurl")
                 call.respondBytes(bytes, status = HttpStatusCode.OK)
@@ -256,38 +312,93 @@ object LocalStreamProxy {
                     ContentType.Application.OctetStream
                 }
 
-                // We stream the data exactly as-is. Since we forced Accept-Encoding: identity, 
-                // the CDN provides the exact Content-Length. Passing it to Ktor prevents 
-                // Chunked Transfer Encoding entirely, while maintaining instant Time-To-First-Byte streaming!
-                //
-                // CRITICAL ASYNCHRONOUS BUFFERING:
-                // We MUST decouple the CDN download speed from FFmpeg's consumption speed.
-                // If we stream directly (using a simple loop), and FFmpeg's buffer fills up, FFmpeg stops reading.
-                // This stalls Ktor, which stalls OkHttp, which stalls the CDN TCP connection.
-                // CDNs aggressively drop idle connections, causing playback to fail!
-                // By using an unlimited Channel, we download the segment into RAM at maximum CDN speed 
-                // in the background, keeping the CDN socket blazing fast so it never gets dropped!
-                call.respondBytesWriter(
-                    contentType = parsedContentType,
-                    status = HttpStatusCode.fromValue(response.code),
-                    contentLength = contentLengthParam,
-                ) {
-                    val streamSource = response.body?.source() ?: return@respondBytesWriter
-                    val ktorChannel = this
+                // CRITICAL ASYNCHRONOUS BUFFERING FIX:
+                // MPV reads from the proxy slowly as its internal buffers fill up. 
+                // If we stream directly (using respondBytesWriter), Ktor suspends when MPV is full.
+                // This stalls the CDN TCP connection. CDNs aggressively drop idle connections (WSAECONNABORTED),
+                // giving MPV a corrupted segment which destroys AV Sync permanently.
+                // SOLUTION: Eagerly load the entire file into RAM if it's a small segment.
+                // Note: CDNs often use Chunked Transfer-Encoding, meaning Content-Length is -1.
+                // We MUST check the URL extension to guarantee segments are buffered in RAM.
+                val isHlsSegment = url.contains(".ts", ignoreCase = true) || 
+                                   url.contains(".m4s", ignoreCase = true) || 
+                                   url.contains(".jpg", ignoreCase = true) || 
+                                   url.contains(".png", ignoreCase = true) || 
+                                   url.contains(".vtt", ignoreCase = true) || 
+                                   (cl in 0..50_000_000L)
 
-                    val buffer = ByteArray(65536) // 64KB chunks
-                    try {
-                        withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            var bytesRead: Int
-                            while (streamSource.read(buffer).also { bytesRead = it } != -1) {
-                                ktorChannel.writeFully(buffer, 0, bytesRead)
+                if (isHlsSegment) {
+                    // CRITICAL ASYNCHRONOUS BUFFERING FIX V2:
+                    // We must decouple CDN download speed from MPV consumption speed to prevent timeouts,
+                    // BUT we cannot eagerly load the entire segment before responding because it destroys
+                    // Time-To-First-Byte latency, starving MPV's cache.
+                    // Solution: An UNLIMITED channel. OkHttp dumps data into the channel as fast as the CDN
+                    // allows (never stalling, never timing out). Ktor reads from the channel and sends to MPV
+                    // as soon as chunks arrive, preserving instant TTFB!
+                    val channel = kotlinx.coroutines.channels.Channel<ByteArray>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+                    val streamSource = response.body?.source()
+                    
+                    if (streamSource != null) {
+                        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            var networkError: Throwable? = null
+                            try {
+                                val buffer = ByteArray(65536)
+                                var bytesRead: Int
+                                while (streamSource.read(buffer).also { bytesRead = it } != -1) {
+                                    channel.send(buffer.copyOfRange(0, bytesRead))
+                                }
+                            } catch (e: Exception) {
+                                networkError = e
+                            } finally {
+                                response.body?.close()
+                                channel.close(networkError)
                             }
                         }
-                    } catch (e: Exception) {
-                        // Ignored (Client disconnected, e.g. user seeking)
-                    } finally {
-                        withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            response.body?.close()
+                    } else {
+                        channel.close()
+                    }
+
+                    call.respondBytesWriter(
+                        contentType = parsedContentType,
+                        status = HttpStatusCode.fromValue(response.code),
+                        contentLength = contentLengthParam
+                    ) {
+                        try {
+                            for (chunk in channel) {
+                                writeFully(chunk)
+                            }
+                        } catch (e: Exception) {
+                            // If the background coroutine failed (e.g. timeout), channel.close(e) 
+                            // will cause the for-loop to throw that exact exception here!
+                            // By throwing it again, we FORCE Ktor to abort the TCP socket, 
+                            // telling MPV that the segment download failed so it can retry it!
+                            channel.cancel()
+                            throw e
+                        }
+                    }
+                } else {
+                    // For massive files (like a direct 2GB MP4), stream them to avoid OOM.
+                    call.respondBytesWriter(
+                        contentType = parsedContentType,
+                        status = HttpStatusCode.fromValue(response.code),
+                        contentLength = contentLengthParam,
+                    ) {
+                        val streamSource = response.body?.source() ?: return@respondBytesWriter
+                        val ktorChannel = this
+                        val buffer = ByteArray(65536)
+                        try {
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                var bytesRead: Int
+                                while (streamSource.read(buffer).also { bytesRead = it } != -1) {
+                                    ktorChannel.writeFully(buffer, 0, bytesRead)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // Ignored (Client disconnected, e.g. user seeking)
+                        } finally {
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                response.body?.close()
+                            }
                         }
                     }
                 }
@@ -363,7 +474,8 @@ object LocalStreamProxy {
                         val uriMatch = URI_REGEX.find(trim)
                         if (uriMatch != null) {
                             val absolute = resolveUrl(baseUrl, uriMatch.groupValues[1])
-                            lazySubs.add(ProxyTrack(absolute, name, lang))
+                            val proxied = buildProxyUrl(sessionId, absolute)
+                            lazySubs.add(ProxyTrack(proxied, name, lang))
                         }
                         continue
                     }
@@ -376,12 +488,13 @@ object LocalStreamProxy {
                         if (uriMatch != null) {
                             val uri = uriMatch.groupValues[1]
                             val absolute = resolveUrl(baseUrl, uri)
+                            val proxied = buildProxyUrl(sessionId, absolute)
 
                             if (uri == bestAudioUrl) {
-                                val newLine = trim.replace(uriMatch.groupValues[0], "URI=\"$absolute\"")
+                                val newLine = trim.replace(uriMatch.groupValues[0], "URI=\"$proxied\"")
                                 appendLine(newLine)
                             } else {
-                                lazyAudios.add(ProxyTrack(absolute, name, lang))
+                                lazyAudios.add(ProxyTrack(proxied, name, lang))
                             }
                         } else {
                             // If there is no URI, it's embedded in the video stream, keep it
@@ -400,7 +513,8 @@ object LocalStreamProxy {
                             val newLine = trim.replace(URI_REGEX) { result ->
                                 val uri = result.groupValues[1]
                                 val absolute = resolveUrl(baseUrl, uri)
-                                "URI=\"$absolute\""
+                                val proxied = buildProxyUrl(sessionId, absolute)
+                                "URI=\"$proxied\""
                             }
                             appendLine(newLine)
                         } else {
@@ -410,27 +524,35 @@ object LocalStreamProxy {
                         // URL line
                         if (pendingVariantLine != null) {
                             val absolute = resolveUrl(baseUrl, trim)
+                            val proxied = buildProxyUrl(sessionId, absolute)
 
                             if (trim == bestVariantUrl) {
                                 // Keep this variant in the proxy M3U8
                                 appendLine(pendingVariantLine)
-                                appendLine(absolute)
+                                appendLine(proxied)
                             } else {
                                 // Strip it from the M3U8, but expose it via lazyVideoTracks!
                                 val bwMatch = BW_REGEX.find(pendingVariantLine)
                                 val resMatch = RES_REGEX.find(pendingVariantLine)
                                 val res = resMatch?.groupValues?.get(1) ?: "Unknown"
-                                val name = if (res != "Unknown") "${res}p" else "Variant"
-                                lazyVideoTracks.add(ProxyTrack(absolute, name, "eng"))
+                                val bw = bwMatch?.groupValues?.get(1)?.toIntOrNull()
+                                val bwLabel = if (bw != null) " ${bw / 1000}kbps" else ""
+                                val name = if (res != "Unknown") "${res}p$bwLabel" else "Variant$bwLabel"
+                                lazyVideoTracks.add(ProxyTrack(proxied, name, "eng"))
                             }
                             pendingVariantLine = null
                         } else {
                             // Non-variant URL line (rare in Master playlist, but just in case)
                             val absolute = resolveUrl(baseUrl, trim)
-                            appendLine(absolute)
+                            val proxied = buildProxyUrl(sessionId, absolute)
+                            appendLine(proxied)
                         }
                     }
                 }
+            }
+
+            if (bestVariantUrl != null) {
+                prefetchM3u8(sessionId, resolveUrl(baseUrl, bestVariantUrl!!))
             }
 
             LocalStreamProxyState.lazyAudioTracks.value = lazyAudios
@@ -455,7 +577,8 @@ object LocalStreamProxy {
                         val newLine = trim.replace(uriRegex) { result ->
                             val uri = result.groupValues[1]
                             val absolute = resolveUrl(baseUrl, uri)
-                            "URI=\"$absolute\""
+                            val proxied = buildProxyUrl(sessionId, absolute)
+                            "URI=\"$proxied\""
                         }
                         appendLine(newLine)
                     } else {
@@ -464,11 +587,13 @@ object LocalStreamProxy {
                 } else {
                     if (nextLineIsVariantUrl) {
                         val absolute = resolveUrl(baseUrl, trim)
-                        appendLine(absolute)
+                        val proxied = buildProxyUrl(sessionId, absolute)
+                        appendLine(proxied)
                         nextLineIsVariantUrl = false
                     } else {
                         val absolute = resolveUrl(baseUrl, trim)
-                        appendLine(absolute)
+                        val proxied = buildProxyUrl(sessionId, absolute)
+                        appendLine(proxied)
                     }
                 }
             }

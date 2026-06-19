@@ -13,6 +13,11 @@ import java.awt.Canvas
 import java.awt.Color
 import java.awt.event.*
 import java.io.File
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+
+
 
 @Composable
 fun ComposeMpvPlayer(
@@ -57,6 +62,7 @@ fun ComposeMpvPlayer(
                 MpvLibrary.INSTANCE.mpv_observe_property(h, 4L, "eof-reached", 3) // Flag
                 MpvLibrary.INSTANCE.mpv_observe_property(h, 5L, "volume", 5) // Double
                 MpvLibrary.INSTANCE.mpv_observe_property(h, 6L, "speed", 5) // Double
+                MpvLibrary.INSTANCE.mpv_observe_property(h, 7L, "core-idle", 3) // Flag
 
                 var lastPos = 0.0
                 var lastDur = 0.0
@@ -76,6 +82,19 @@ fun ComposeMpvPlayer(
                             break
                         }
 
+                        if (eventId == 7) { // MPV_EVENT_END_FILE
+                            val endFilePtr = event.data
+                            if (endFilePtr != null) {
+                                val endFile = MpvLibrary.MpvEventEndFile(endFilePtr)
+                                if (endFile.reason == 4) { // MPV_END_FILE_REASON_ERROR
+                                    // 403 Forbidden or generic network error
+                                    com.lagradost.common.logging.AppLogger.e("MPV instant failure (MPV_END_FILE_REASON_ERROR)")
+                                    currentOnPlaybackError("Connection rejected by source (HTTP error or dead link).")
+                                    break
+                                }
+                            }
+                        }
+
                         if (eventId == 22) { // MPV_EVENT_PROPERTY_CHANGE
                             val propPtr = event.data
                             if (propPtr != null) {
@@ -91,6 +110,7 @@ fun ComposeMpvPlayer(
                                             if (!hasEverPlayed && lastPos > 0.0) {
                                                 hasEverPlayed = true
                                                 playerState?.isBuffering?.value = false
+                                                playerState?.isProbing?.value = false
                                                 currentOnPlaybackReady()
                                             }
                                             if (lastDur > 0) {
@@ -112,6 +132,15 @@ fun ComposeMpvPlayer(
                                         }
                                         "speed" -> {
                                             if (prop.format == 5) playerState?.playbackSpeed?.value = prop.data!!.getDouble(0).toFloat()
+                                        }
+                                        "core-idle" -> {
+                                            if (prop.format == 3) {
+                                                val isCoreIdle = prop.data!!.getInt(0) != 0
+                                                // If hasn't played yet and core is idle, it is probing the network
+                                                if (!hasEverPlayed) {
+                                                    playerState?.isProbing?.value = isCoreIdle
+                                                }
+                                            }
                                         }
                                     }
                                 }

@@ -301,10 +301,20 @@ fun EmbeddedVideoPlayer(
                                 // --- Initial Stream Loading State ---
                                 if (isLoading && !isLoadingNextEpisode) {
                                     val proxyStatus by com.lagradost.player.impl.proxy.LocalStreamProxyState.loadingStatus.collectAsState()
+                                    val isProbing by playerState.isProbing.collectAsState()
+                                    
+                                    val statusToDisplay = if (proxyStatus != null) {
+                                        proxyStatus
+                                    } else if (isProbing) {
+                                        "Probing connection natively..."
+                                    } else {
+                                        "Connecting to server..."
+                                    }
+                                    
                                     com.lagradost.cloudstream3.desktop.ui.screens.player.components.StreamLoadingOverlay(
                                         title = actualLaunchData.title ?: "Loading...",
                                         linkName = actualLaunchData.links.getOrNull(currentLinkIndex)?.name ?: "",
-                                        loadingStatus = proxyStatus,
+                                        loadingStatus = statusToDisplay,
                                         onCancel = { isLoading = false }
                                     )
                                 }
