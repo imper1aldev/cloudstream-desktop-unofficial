@@ -390,8 +390,13 @@ object LocalStreamProxy {
                             for (attempt in 1..3) {
                                 try {
                                     currentResponse = proxyClient.newCall(resumeBuilder.build()).await()
-                                    if (currentResponse!!.isSuccessful || currentResponse!!.code == 206) {
+                                    if (currentResponse!!.isSuccessful) {
                                         streamSource = currentResponse!!.body?.source() ?: throw Exception("No body")
+                                        if (currentResponse!!.code == 200 && totalBytesRead > 0) {
+                                            // The CDN ignored our Range request and returned the full file.
+                                            // We MUST manually skip the bytes we've already streamed to MPV!
+                                            streamSource.skip(totalBytesRead)
+                                        }
                                         retrySuccess = true
                                         break
                                     }
