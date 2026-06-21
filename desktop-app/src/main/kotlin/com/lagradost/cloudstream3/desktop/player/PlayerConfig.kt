@@ -14,19 +14,12 @@ object PlayerConfig {
     const val PREF_INTERPOLATION = "player_interpolation_enabled"
 
     fun applyMpvSettings(handle: Pointer, lib: MpvLibrary) {
-        // --- VO / GPU path ---
-        // gpu-next is the modern rendering API recommended by upstream MPV for Windows,
-        // offering vastly superior D3D11 swapchain synchronization inside embedded child windows.
-        lib.mpv_set_option_string(handle, "vo", "gpu-next")
-        lib.mpv_set_option_string(handle, "gpu-api", "d3d11")
-        lib.mpv_set_option_string(handle, "d3d11-sync-interval", "1")
-        lib.mpv_set_option_string(handle, "d3d11-flip", "yes")
-        lib.mpv_set_option_string(handle, "d3d11-warp", "false")
-
-        // Hardware Acceleration (Default: auto)
+        // Hardware Acceleration — let MPV auto-detect the best decoder.
+        // Do NOT set vo, gpu-api, gpu-context, d3d11-flip, etc. here.
+        // MPV's auto-detection is battle-tested; our overrides have caused
+        // repeated regressions. The VO is set in ComposeMpvPlayer before init.
         val hwdec = DesktopDataStore.getKey<String>(PREF_HWDEC) ?: "auto"
         lib.mpv_set_option_string(handle, "hwdec", hwdec)
-        lib.mpv_set_option_string(handle, "hwdec-codecs", "h264,hevc,vp9,av1,mpeg4")
 
         // Subtitles Size (Default: 45)
         val subSize = DesktopDataStore.getKey<String>(PREF_SUB_SIZE) ?: "45"

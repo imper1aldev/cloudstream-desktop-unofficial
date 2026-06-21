@@ -69,6 +69,8 @@ fun ComposeMpvPlayer(
                 var lastEofReached = false
                 var lastPeriodicUpdate = 0L
                 var lastUiPositionEmit = 0L
+                var diagnosticLogged = false
+                var playbackStartedAt = 0L
 
                 while (isActive) {
                     try {
@@ -108,9 +110,30 @@ fun ComposeMpvPlayer(
                                             
                                             if (!hasEverPlayed && lastPos > 0.0) {
                                                 hasEverPlayed = true
+                                                playbackStartedAt = System.currentTimeMillis()
                                                 playerState?.isBuffering?.value = false
                                                 playerState?.isProbing?.value = false
                                                 currentOnPlaybackReady()
+                                            }
+
+                                            // One-shot diagnostic: 30s after playback starts,
+                                            // log the actual rendering pipeline and frame stats.
+                                            // This fires exactly once to help debug stutter.
+                                            if (!diagnosticLogged && playbackStartedAt > 0 &&
+                                                System.currentTimeMillis() - playbackStartedAt > 30000) {
+                                                diagnosticLogged = true
+                                                val dVo = MpvLibrary.getPropertyString(h, "current-vo")
+                                                val dHwdec = MpvLibrary.getPropertyString(h, "hwdec-current")
+                                                val dCodec = MpvLibrary.getPropertyString(h, "video-codec")
+                                                val dDropped = MpvLibrary.getPropertyString(h, "vo-drop-frame-count")
+                                                val dFps = MpvLibrary.getPropertyString(h, "estimated-vf-fps")
+                                                val dW = MpvLibrary.getPropertyString(h, "width")
+                                                val dH = MpvLibrary.getPropertyString(h, "height")
+                                                val dCache = MpvLibrary.getPropertyString(h, "demuxer-cache-duration")
+                                                com.lagradost.common.logging.AppLogger.i(
+                                                    "MPV 30s DIAGNOSTIC: vo=$dVo hwdec=$dHwdec codec=$dCodec " +
+                                                    "dropped=$dDropped fps=$dFps res=${dW}x${dH} cache=${dCache}s"
+                                                )
                                             }
 
                                             // Throttle UI position updates to 4 Hz max.
@@ -159,9 +182,11 @@ fun ComposeMpvPlayer(
                         }
                     }
 
-                    // Throttle non-critical string property polling to at most every 200ms
+                    // Throttle non-critical string property polling to at most every 1s
+                    // (was 200ms — 5Hz Compose recomposition of the seekbar buffer indicator
+                    // was competing with MPV's render thread for GPU time)
                     val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastPeriodicUpdate >= 200L) {
+                    if (currentTime - lastPeriodicUpdate >= 1000L) {
                         lastPeriodicUpdate = currentTime
 
                         // Check buffer state (demuxer cache is noisy, we poll it manually)
@@ -496,6 +521,14 @@ fun ComposeMpvPlayer(
         object : java.awt.Canvas() {
             var keyDispatcher: java.awt.KeyEventDispatcher? = null
 
+            // CRITICAL: Override paint/update to prevent AWT from clearing
+            // MPV's rendering surface. When Compose's SwingPanel triggers a
+            // repaint, the default Canvas.update() fills the component with
+            // the background color, causing a flash that interferes with MPV.
+            // MPV handles all rendering via the wid child window.
+            override fun paint(g: java.awt.Graphics?) { /* MPV renders via wid */ }
+            override fun update(g: java.awt.Graphics?) { /* Do NOT clear — MPV owns the surface */ }
+
             override fun addNotify() {
                 super.addNotify()
 
@@ -524,6 +557,11 @@ fun ComposeMpvPlayer(
                 lib.mpv_set_option_string(handle, "osd-level", "0")
                 lib.mpv_set_option_string(handle, "osd-bar", "no")
 
+                // VO: use the battle-tested 'gpu' output, NOT 'gpu-next'.
+                // gpu-next requires libplacebo which may not be in the bundled libmpv,
+                // causing silent fallback to a broken/software pipeline.
+                lib.mpv_set_option_string(handle, "vo", "gpu")
+
                 // Apply User Settings & Logging
                 PlayerConfig.applyMpvSettings(handle, lib)
 
@@ -540,6 +578,12 @@ fun ComposeMpvPlayer(
 
                 com.lagradost.common.logging.AppLogger.i("Initializing embedded MPV Engine")
                 lib.mpv_initialize(handle)
+
+                // Post-init diagnostics: log what MPV actually chose for VO/hwdec
+                // so we can debug rendering issues without enabling verbose logging
+                val actualVo = MpvLibrary.getPropertyString(handle, "current-vo")
+                val actualHwdec = MpvLibrary.getPropertyString(handle, "hwdec-current")
+                com.lagradost.common.logging.AppLogger.i("MPV initialized: vo=$actualVo, hwdec=$actualHwdec")
 
                 // Setup Mouse and Keyboard interactions
                 val canvas = this

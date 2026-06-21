@@ -181,7 +181,24 @@ object LocalStreamProxy {
                 ByteArray(0)
             }
         }
-        session.masterCache[url] = deferred
+        // ONLY cache if this is a MASTER playlist (contains #EXT-X-STREAM-INF).
+        // Media playlists MUST NOT be cached because:
+        // 1. CDN segment URLs contain auth tokens that expire after ~30s
+        // 2. Live/EVENT streams need fresh segment lists
+        // The deferred is still awaited on first request (speeds up startup)
+        // but is NOT stored in masterCache for media playlists.
+        // We launch a coroutine to check the content type after fetch completes.
+        GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val bytes = deferred.await()
+                val content = String(bytes, Charsets.UTF_8)
+                if (content.contains("#EXT-X-STREAM-INF")) {
+                    // Master playlist — safe to cache indefinitely
+                    session.masterCache[url] = GlobalScope.async { bytes }
+                }
+                // Media playlist — do NOT cache, let handleRequest fetch fresh each time
+            } catch (_: Exception) {}
+        }
     }
     private suspend fun handleRequest(call: io.ktor.server.application.ApplicationCall) {
         try {
