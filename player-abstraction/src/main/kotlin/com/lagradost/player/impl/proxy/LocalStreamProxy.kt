@@ -341,26 +341,74 @@ object LocalStreamProxy {
                     status = HttpStatusCode.fromValue(response.code),
                     contentLength = contentLengthParam,
                 ) {
-                    val streamSource = response.body?.source() ?: return@respondBytesWriter
+                    var currentResponse: okhttp3.Response? = response
+                    var streamSource = currentResponse?.body?.source() ?: return@respondBytesWriter
                     val ktorChannel = this
                     val buffer = ByteArray(65536)
-                    try {
-                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    var totalBytesRead = 0L
+
+                    while (true) {
+                        try {
                             var bytesRead: Int
-                            while (streamSource.read(buffer).also { bytesRead = it } != -1) {
-                                ktorChannel.writeFully(buffer, 0, bytesRead)
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                while (streamSource.read(buffer).also { bytesRead = it } != -1) {
+                                    ktorChannel.writeFully(buffer, 0, bytesRead)
+                                    totalBytesRead += bytesRead
+                                }
+                            }
+                            break // EOF reached naturally
+                        } catch (e: Exception) {
+                            // If Ktor's channel is closed, the client (MPV) disconnected. Stop proxying.
+                            if (ktorChannel.isClosedForWrite) {
+                                break
+                            }
+
+                            // If we don't know the total size and it's chunked, or we reached the known size, we're done.
+                            val cl = currentResponse?.body?.contentLength() ?: -1L
+                            if (cl != -1L && totalBytesRead >= cl) {
+                                break
+                            }
+
+                            AppLogger.w("CDN connection dropped mid-stream at $totalBytesRead/$cl bytes. Resuming transparently...")
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                currentResponse?.body?.close()
+                            }
+
+                            // Transparently reconnect and resume from totalBytesRead
+                            val resumeBuilder = requestBuilder.build().newBuilder()
+                            val origRange = mergedHeaders["Range"]
+                            if (origRange != null && origRange.startsWith("bytes=", ignoreCase = true)) {
+                                val startPart = origRange.substringAfter("=").substringBefore("-").toLongOrNull() ?: 0L
+                                val endPart = origRange.substringAfter("-")
+                                val newStart = startPart + totalBytesRead
+                                resumeBuilder.header("Range", "bytes=$newStart-$endPart")
+                            } else {
+                                resumeBuilder.header("Range", "bytes=$totalBytesRead-")
+                            }
+
+                            var retrySuccess = false
+                            for (attempt in 1..3) {
+                                try {
+                                    currentResponse = proxyClient.newCall(resumeBuilder.build()).await()
+                                    if (currentResponse!!.isSuccessful || currentResponse!!.code == 206) {
+                                        streamSource = currentResponse!!.body?.source() ?: throw Exception("No body")
+                                        retrySuccess = true
+                                        break
+                                    }
+                                } catch (retryEx: Exception) {
+                                    kotlinx.coroutines.delay(500L * attempt)
+                                }
+                            }
+
+                            if (!retrySuccess) {
+                                AppLogger.e("Failed to transparently resume CDN stream.")
+                                throw e // Abort and let MPV handle the error
                             }
                         }
-                    } catch (e: Exception) {
-                        // Crucially, if OkHttp times out or fails mid-stream, re-throw the 
-                        // exception! This forces Ktor to abruptly kill the TCP socket, 
-                        // signaling to MPV that the segment was truncated. MPV's event loop
-                        // catches MPV_END_FILE_REASON_ERROR and retries instead of playing corrupt data.
-                        throw e
-                    } finally {
-                        withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            response.body?.close()
-                        }
+                    }
+
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        currentResponse?.body?.close()
                     }
                 }
             }
