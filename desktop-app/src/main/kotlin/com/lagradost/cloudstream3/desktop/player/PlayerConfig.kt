@@ -38,7 +38,7 @@ object PlayerConfig {
         lib.mpv_set_option_string(handle, "ytdl-format", ytdlFormat)
 
         // Verbose Logging for Dev Console
-        lib.mpv_set_option_string(handle, "msg-level", "all=v")
+        lib.mpv_set_option_string(handle, "msg-level", "all=debug")
         lib.mpv_set_option_string(handle, "terminal", "yes")
 
         // Fast Startup Optimizations
