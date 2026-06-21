@@ -488,7 +488,8 @@ object LocalStreamProxy {
                         val uriMatch = URI_REGEX.find(trim)
                         if (uriMatch != null) {
                             val absolute = resolveUrl(baseUrl, uriMatch.groupValues[1])
-                            lazySubs.add(ProxyTrack(absolute, name, lang))
+                            val proxied = buildProxyUrl(sessionId, absolute)
+                            lazySubs.add(ProxyTrack(proxied, name, lang))
                         }
                         continue
                     }
@@ -501,12 +502,13 @@ object LocalStreamProxy {
                         if (uriMatch != null) {
                             val uri = uriMatch.groupValues[1]
                             val absolute = resolveUrl(baseUrl, uri)
+                            val proxied = buildProxyUrl(sessionId, absolute)
 
                             if (uri == bestAudioUrl) {
-                                val newLine = trim.replace(uriMatch.groupValues[0], "URI=\"$absolute\"")
+                                val newLine = trim.replace(uriMatch.groupValues[0], "URI=\"$proxied\"")
                                 appendLine(newLine)
                             } else {
-                                lazyAudios.add(ProxyTrack(absolute, name, lang))
+                                lazyAudios.add(ProxyTrack(proxied, name, lang))
                             }
                         } else {
                             // If there is no URI, it's embedded in the video stream, keep it
@@ -521,8 +523,8 @@ object LocalStreamProxy {
                             val newLine = trim.replace(uriRegex) { result ->
                                 val uri = result.groupValues[1]
                                 val absolute = resolveUrl(baseUrl, uri)
-                                // Scenario A: Let MPV natively fetch audio/sub playlists directly from the CDN
-                                "URI=\"$absolute\""
+                                val proxied = buildProxyUrl(sessionId, absolute)
+                                "URI=\"$proxied\""
                             }
                             appendLine(newLine)
                         } else {
@@ -536,10 +538,12 @@ object LocalStreamProxy {
                         // URL line
                         if (pendingVariantLine != null) {
                             val absolute = resolveUrl(baseUrl, trim)
+                            val proxied = buildProxyUrl(sessionId, absolute)
+
                             if (absolute == bestVariantUrl) {
-                                // Keep this variant, but bypass the proxy!
+                                // Keep this variant in the proxy M3U8
                                 appendLine(pendingVariantLine)
-                                appendLine(absolute)
+                                appendLine(proxied)
                             }
                             
                             // Expose to Compose UI
@@ -549,11 +553,15 @@ object LocalStreamProxy {
                             val bw = bwMatch?.groupValues?.get(1)?.toIntOrNull()
                             val bwLabel = if (bw != null) " ${bw / 1000}kbps" else ""
                             val name = if (res != "Unknown") "${res}p$bwLabel" else "Variant$bwLabel"
-                            lazyVideoTracks.add(ProxyTrack(absolute, name, "eng"))
+                            lazyVideoTracks.add(ProxyTrack(proxied, name, "eng"))
                         }
                         pendingVariantLine = null
                     }
                 }
+            }
+
+            if (bestVariantUrl != null) {
+                prefetchM3u8(sessionId, resolveUrl(baseUrl, bestVariantUrl!!))
             }
 
             LocalStreamProxyState.lazyAudioTracks.value = lazyAudios
@@ -576,8 +584,8 @@ object LocalStreamProxy {
                         val newLine = trim.replace(uriRegex) { result ->
                             val uri = result.groupValues[1]
                             val absolute = resolveUrl(baseUrl, uri)
-                            // Scenario A: Bypass proxy
-                            "URI=\"$absolute\""
+                            val proxied = buildProxyUrl(sessionId, absolute)
+                            "URI=\"$proxied\""
                         }
                         appendLine(newLine)
                     } else {
