@@ -314,20 +314,22 @@ fun ComposeMpvPlayer(
         when (validated.streamKind) {
             PlayerLinkHandler.StreamKind.HLS -> {
                 lib.mpv_set_property_string(handle, "hls-bitrate", "max")
+                // Increase buffer size massively for high bitrate 4K streams
+                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "400000000")      // 400MB forward
+                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "100000000") // 100MB back
+                lib.mpv_set_property_string(handle, "cache", "yes")
+                lib.mpv_set_property_string(handle, "cache-secs", "60")       // 60s lookahead
+                lib.mpv_set_property_string(handle, "demuxer-readahead-secs", "60")
+                lib.mpv_set_property_string(handle, "cache-pause-wait", "3")
+
                 lib.mpv_set_option_string(
                     handle,
                     "demuxer-lavf-o",
-                    "extension_picky=0",
+                    "extension_picky=0,fflags=+ignidx+igndts,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx,5xx",
                 )
-                // HLS via LocalStreamProxy: give MPV enough forward buffer to handle
-                // bursty CDN delivery without pausing, but don't buffer more than 30s
-                // ahead — live streams only have ~10-30s of future segments anyway.
-                // Back-buffer: keep only 5MB — you can't seek backwards on live TV.
-                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "50000000")      // 50MB forward
-                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "5000000")   // 5MB back
-                lib.mpv_set_property_string(handle, "cache", "yes")
-                lib.mpv_set_property_string(handle, "cache-secs", "30")       // 30s lookahead cap, not 3600s
-                lib.mpv_set_property_string(handle, "cache-pause-wait", "3")  // Wait 3s before pausing
+                // Allow demuxer to seek ahead aggressively:
+                lib.mpv_set_property_string(handle, "demuxer-seekable-cache", "yes")
+                lib.mpv_set_property_string(handle, "force-seekable", "yes")
             }
             PlayerLinkHandler.StreamKind.DASH -> {
                 // Build DASH lavf options. cenc_decryption_key MUST be standalone —
@@ -506,7 +508,6 @@ fun ComposeMpvPlayer(
                 lib.mpv_set_option_string(handle, "osc", "no")
                 lib.mpv_set_option_string(handle, "osd-level", "0")
                 lib.mpv_set_option_string(handle, "osd-bar", "no")
-                lib.mpv_set_option_string(handle, "vo", "gpu")
 
                 // Apply User Settings & Logging
                 PlayerConfig.applyMpvSettings(handle, lib)
