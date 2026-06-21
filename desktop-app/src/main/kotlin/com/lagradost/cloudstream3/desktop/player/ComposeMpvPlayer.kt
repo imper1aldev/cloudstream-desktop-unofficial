@@ -389,7 +389,7 @@ fun ComposeMpvPlayer(
                 lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "5000000")   // 5MB back
                 lib.mpv_set_property_string(handle, "cache", "yes")
             }
-            PlayerLinkHandler.StreamKind.PROGRESSIVE -> {
+        PlayerLinkHandler.StreamKind.PROGRESSIVE -> {
                 // Raw MPEG-TS / progressive HTTP live streams need reconnect too.
                 // Without this, FFmpeg treats the end of an HTTP chunk as permanent EOF.
                 lib.mpv_set_property_string(
@@ -403,9 +403,14 @@ fun ComposeMpvPlayer(
                     "stream-lavf-o",
                     "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4",
                 )
-                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "20000000")      // 20MB
-                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "5000000")  // 5MB
+                // MKV/MP4 files from CDNs like Pixeldrain often use one-time download links.
+                // Seeking forces MPV to open a new HTTP connection with a Range header, which returns 404.
+                // By massively increasing the buffer and forcing seekable-cache, MPV can seek entirely in memory!
+                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "400000000")      // 400MB forward
+                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "100000000") // 100MB back
                 lib.mpv_set_property_string(handle, "cache", "yes")
+                lib.mpv_set_property_string(handle, "demuxer-seekable-cache", "yes")
+                lib.mpv_set_property_string(handle, "force-seekable", "yes")
             }
         }
 
