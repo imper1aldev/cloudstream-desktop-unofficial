@@ -38,8 +38,8 @@ object PlayerConfig {
         lib.mpv_set_option_string(handle, "ytdl-format", ytdlFormat)
 
         // Verbose Logging for Dev Console
-        lib.mpv_set_option_string(handle, "msg-level", "all=warn")
-        lib.mpv_set_option_string(handle, "terminal", "no")
+        lib.mpv_set_option_string(handle, "msg-level", "all=v")
+        lib.mpv_set_option_string(handle, "terminal", "yes")
 
         // Fast Startup Optimizations
         // NOTE: demuxer-max-bytes / demuxer-max-back-bytes are NOT set here.
