@@ -68,6 +68,7 @@ fun ComposeMpvPlayer(
                 var lastDur = 0.0
                 var lastEofReached = false
                 var lastPeriodicUpdate = 0L
+                var lastUiPositionEmit = 0L
 
                 while (isActive) {
                     try {
@@ -104,8 +105,6 @@ fun ComposeMpvPlayer(
                                     when (name) {
                                         "time-pos" -> {
                                             if (prop.format == 5) lastPos = prop.data!!.getDouble(0)
-                                            val posMs = (lastPos * 1000).toLong()
-                                            playerState?.positionMs?.value = posMs
                                             
                                             if (!hasEverPlayed && lastPos > 0.0) {
                                                 hasEverPlayed = true
@@ -113,8 +112,20 @@ fun ComposeMpvPlayer(
                                                 playerState?.isProbing?.value = false
                                                 currentOnPlaybackReady()
                                             }
-                                            if (lastDur > 0) {
-                                                currentOnPositionChange(posMs, (lastDur * 1000).toLong())
+
+                                            // Throttle UI position updates to 4 Hz max.
+                                            // MPV fires time-pos at video framerate (24-60 Hz),
+                                            // and each update triggers Compose recomposition of
+                                            // the seekbar + time labels, competing with MPV's
+                                            // render thread for GPU time.
+                                            val now = System.currentTimeMillis()
+                                            if (now - lastUiPositionEmit > 250) {
+                                                lastUiPositionEmit = now
+                                                val posMs = (lastPos * 1000).toLong()
+                                                playerState?.positionMs?.value = posMs
+                                                if (lastDur > 0) {
+                                                    currentOnPositionChange(posMs, (lastDur * 1000).toLong())
+                                                }
                                             }
                                         }
                                         "duration" -> {
@@ -163,7 +174,7 @@ fun ComposeMpvPlayer(
                         }
 
                     // Poll tracks less frequently
-                    if (loops % 10 == 0) {
+                    if (loops % 25 == 0) {
                         val trackCountStr = MpvLibrary.getPropertyString(h, "track-list/count")
                         val trackCount = trackCountStr?.toIntOrNull() ?: 0
 
@@ -322,7 +333,11 @@ fun ComposeMpvPlayer(
                 lib.mpv_set_property_string(handle, "demuxer-readahead-secs", "60")
                 lib.mpv_set_property_string(handle, "cache-pause-wait", "3")
 
-                lib.mpv_set_option_string(
+                // CRITICAL: Must use mpv_set_property_string here, NOT mpv_set_option_string!
+                // Options can only be set before mpv_initialize(). This runs after init,
+                // so mpv_set_option_string silently ignores the entire string — meaning
+                // reconnect flags, ignidx, igndts are all dead without this fix.
+                lib.mpv_set_property_string(
                     handle,
                     "demuxer-lavf-o",
                     "extension_picky=0,fflags=+ignidx+igndts,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx,5xx",
@@ -342,7 +357,7 @@ fun ComposeMpvPlayer(
                         append(",cenc_decryption_key=${validated.clearKeyHex}")
                     }
                 }
-                lib.mpv_set_option_string(handle, "demuxer-lavf-o", lavfDashOpts)
+                lib.mpv_set_property_string(handle, "demuxer-lavf-o", lavfDashOpts)
                 // DASH: 30MB forward buffer is plenty for 1080p segments (~4MB each)
                 // Back-buffer: 5MB for live, could be more for VOD but keep conservative
                 lib.mpv_set_property_string(handle, "demuxer-max-bytes", "30000000")       // 30MB forward

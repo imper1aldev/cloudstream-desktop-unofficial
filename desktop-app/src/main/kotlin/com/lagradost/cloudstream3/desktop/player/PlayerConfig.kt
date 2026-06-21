@@ -49,9 +49,10 @@ object PlayerConfig {
         lib.mpv_set_option_string(handle, "terminal", "no")
 
         // Fast Startup Optimizations
+        // NOTE: demuxer-max-bytes / demuxer-max-back-bytes are NOT set here.
+        // Each stream kind (HLS/DASH/PROGRESSIVE) sets its own optimal values
+        // in ComposeMpvPlayer after init, via mpv_set_property_string.
         lib.mpv_set_option_string(handle, "cache", "yes")
-        lib.mpv_set_option_string(handle, "demuxer-max-bytes", "150M") // Generous buffer
-        lib.mpv_set_option_string(handle, "demuxer-max-back-bytes", "50M")
         lib.mpv_set_option_string(handle, "cache-pause", "yes") // Allow MPV to pause to buffer, preventing video freeze with audio continuing
 
         // Interpolation / Blending (Smooth motion for 24fps/30fps videos on high refresh rate displays)
