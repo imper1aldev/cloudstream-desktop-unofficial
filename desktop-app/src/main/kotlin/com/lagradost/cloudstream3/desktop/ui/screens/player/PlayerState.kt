@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.desktop.ui.screens.player
 
 import com.lagradost.cloudstream3.desktop.player.MpvLibrary
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class PlayerState {
     val positionMs = MutableStateFlow(0L)
@@ -50,6 +51,20 @@ class PlayerState {
         mpvHandle = null
     }
 
+    /**
+     * Resets all playback state for a new stream load.
+     * Call this before ComposeMpvPlayer loads a new URL so the UI shows correct initial state.
+     */
+    fun reset() {
+        positionMs.value = 0L
+        durationMs.value = 0L
+        bufferMs.value = 0L
+        isPaused.value = false
+        isBuffering.value = true
+        isProbing.value = false
+        lastSeekTime = 0L
+    }
+
     fun togglePlayPause() {
         mpvHandle?.let {
             val currentlyPaused = isPaused.value
@@ -78,7 +93,12 @@ class PlayerState {
         mpvHandle?.let {
             lastSeekTime = System.currentTimeMillis()
             val posSec = positionMs / 1000.0
-            MpvLibrary.INSTANCE.mpv_set_property_string(it, "time-pos", posSec.toString())
+            // Use the seek command instead of setting time-pos directly.
+            // For HLS with force-seekable=yes, mpv_set_property_string(time-pos) silently
+            // no-ops when the target segment isn't in the demuxer cache — the slider moves
+            // but the video doesn't. mpv_command_string(seek absolute) forces a demuxer
+            // flush and a real network segment re-request.
+            MpvLibrary.INSTANCE.mpv_command_string(it, "seek $posSec absolute")
             this.positionMs.value = positionMs
         }
     }
@@ -92,9 +112,10 @@ class PlayerState {
     }
 
     // Called by the native event observer loop
-    // Debounced to prevent stale time-pos events in the MPV queue from reverting the slider visually right after a seek
+    // Debounced to prevent stale time-pos events in the MPV queue from reverting the slider visually right after a seek.
+    // HLS seek round-trips commonly take 500-800ms on real CDNs, so we use a 1000ms window.
     fun updatePositionFromPlayer(posMs: Long) {
-        if (System.currentTimeMillis() - lastSeekTime > 500L) {
+        if (System.currentTimeMillis() - lastSeekTime > 1000L) {
             this.positionMs.value = posMs
         }
     }
@@ -138,31 +159,37 @@ class PlayerState {
     }
 
     fun setSubtitleTrack(id: Int?) {
-        mpvHandle?.let {
-            if (id == null) {
-                MpvLibrary.INSTANCE.mpv_set_property_string(it, "sid", "no")
-            } else {
-                MpvLibrary.INSTANCE.mpv_set_property_string(it, "sid", id.toString())
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            mpvHandle?.let {
+                if (id == null) {
+                    MpvLibrary.INSTANCE.mpv_set_property_string(it, "sid", "no")
+                } else {
+                    MpvLibrary.INSTANCE.mpv_set_property_string(it, "sid", id.toString())
+                }
             }
         }
     }
 
     fun setAudioTrack(id: Int?) {
-        mpvHandle?.let {
-            if (id == null) {
-                MpvLibrary.INSTANCE.mpv_set_property_string(it, "aid", "no")
-            } else {
-                MpvLibrary.INSTANCE.mpv_set_property_string(it, "aid", id.toString())
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            mpvHandle?.let {
+                if (id == null) {
+                    MpvLibrary.INSTANCE.mpv_set_property_string(it, "aid", "no")
+                } else {
+                    MpvLibrary.INSTANCE.mpv_set_property_string(it, "aid", id.toString())
+                }
             }
         }
     }
 
     fun setVideoTrack(id: Int?) {
-        mpvHandle?.let {
-            if (id == null) {
-                MpvLibrary.INSTANCE.mpv_set_property_string(it, "vid", "auto")
-            } else {
-                MpvLibrary.INSTANCE.mpv_set_property_string(it, "vid", id.toString())
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            mpvHandle?.let {
+                if (id == null) {
+                    MpvLibrary.INSTANCE.mpv_set_property_string(it, "vid", "auto")
+                } else {
+                    MpvLibrary.INSTANCE.mpv_set_property_string(it, "vid", id.toString())
+                }
             }
         }
     }

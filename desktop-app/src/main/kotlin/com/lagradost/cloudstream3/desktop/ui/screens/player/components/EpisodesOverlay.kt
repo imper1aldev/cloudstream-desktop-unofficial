@@ -29,7 +29,7 @@ import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
-import com.lagradost.cloudstream3.desktop.ui.components.AppDropdownMenu
+import androidx.compose.ui.zIndex
 
 @Composable
 fun EpisodesOverlay(
@@ -203,8 +203,8 @@ fun EpisodesOverlay(
                         )
 
                         var expanded by remember { mutableStateOf(false) }
-                        Box {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { expanded = true }) {
+                        Box(modifier = Modifier.zIndex(10f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { expanded = !expanded }.padding(horizontal = 8.dp, vertical = 4.dp)) {
                                 val selectorText = if (loadResponse is TvSeriesLoadResponse) "Season $selectedSeason" else selectedDub?.name ?: ""
                                 Text(
                                     text = selectorText,
@@ -214,30 +214,52 @@ fun EpisodesOverlay(
                                 )
                                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = Color.White)
                             }
-                            AppDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false },
-                                modifier = Modifier.heightIn(max = 300.dp),
+                            
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = expanded,
+                                modifier = Modifier.align(Alignment.TopCenter).offset(y = 32.dp)
                             ) {
-                                if (loadResponse is TvSeriesLoadResponse) {
-                                    seasons.forEach { season ->
-                                        DropdownMenuItem(
-                                            text = { Text("Season $season", fontWeight = FontWeight.SemiBold) },
-                                            onClick = {
-                                                selectedSeason = season
-                                                expanded = false
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF1E1E28),
+                                    tonalElevation = 8.dp,
+                                    shadowElevation = 8.dp,
+                                    modifier = Modifier.widthIn(min = 120.dp).heightIn(max = 300.dp)
+                                ) {
+                                    LazyColumn {
+                                        if (loadResponse is TvSeriesLoadResponse) {
+                                            items(seasons) { season ->
+                                                val isSelected = season == selectedSeason
+                                                Text(
+                                                    text = "Season $season",
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (isSelected) Color(0xFF9151FF) else Color.White,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            selectedSeason = season
+                                                            expanded = false
+                                                        }
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                )
                                             }
-                                        )
-                                    }
-                                } else if (loadResponse is AnimeLoadResponse) {
-                                    dubs.forEach { dub ->
-                                        DropdownMenuItem(
-                                            text = { Text(dub.name, fontWeight = FontWeight.SemiBold) },
-                                            onClick = {
-                                                selectedDub = dub
-                                                expanded = false
+                                        } else if (loadResponse is AnimeLoadResponse) {
+                                            items(dubs) { dub ->
+                                                val isSelected = dub == selectedDub
+                                                Text(
+                                                    text = dub.name,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (isSelected) Color(0xFF9151FF) else Color.White,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            selectedDub = dub
+                                                            expanded = false
+                                                        }
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                )
                                             }
-                                        )
+                                        }
                                     }
                                 }
                             }

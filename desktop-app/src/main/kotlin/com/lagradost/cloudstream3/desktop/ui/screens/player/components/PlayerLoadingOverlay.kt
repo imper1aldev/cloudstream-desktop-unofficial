@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,6 +28,7 @@ fun StreamLoadingOverlay(
     title: String,
     linkName: String,
     loadingStatus: String? = null,
+    backdropUrl: String? = null,
     onCancel: (() -> Unit)? = null,
 ) {
     // Animated pulsing dots
@@ -50,15 +53,26 @@ fun StreamLoadingOverlay(
     )
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.75f)),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
+        if (backdropUrl != null) {
+            coil3.compose.AsyncImage(
+                model = backdropUrl,
+                contentDescription = "Backdrop",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().blur(24.dp)
+            )
+        }
+        
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.65f))
+        )
+
         Surface(
             modifier = Modifier.widthIn(min = 320.dp, max = 420.dp),
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xE6121212),
+            color = Color(0xB3121212),
         ) {
             Box {
                 if (onCancel != null) {
@@ -141,19 +155,31 @@ fun PlayerLoadingOverlay(
     title: String,
     episodeText: String,
     linksFound: Int,
+    backdropUrl: String? = null,
     onPlayNow: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f)),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
+        if (backdropUrl != null) {
+            coil3.compose.AsyncImage(
+                model = backdropUrl,
+                contentDescription = "Backdrop",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().blur(24.dp)
+            )
+        }
+        
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.65f))
+        )
+
         Surface(
             modifier = Modifier.widthIn(min = 350.dp, max = 450.dp),
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xE6121212),
+            color = Color(0xB3121212),
         ) {
             Column(
                 modifier = Modifier.padding(32.dp),

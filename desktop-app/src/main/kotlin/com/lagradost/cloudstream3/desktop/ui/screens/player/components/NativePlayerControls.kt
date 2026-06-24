@@ -34,6 +34,7 @@ fun NativePlayerControls(
     launchData: com.lagradost.cloudstream3.desktop.ui.VideoLaunchData,
     currentLinkIndex: Int,
     isFullscreen: Boolean,
+    isAppFocused: Boolean = true,
     onLinkSelected: (Int) -> Unit,
     hasNextEpisode: Boolean = false,
     hasPrevEpisode: Boolean = false,
@@ -50,6 +51,9 @@ fun NativePlayerControls(
     val showControls by playerState.showControls.collectAsState()
 
     var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    // Track the raw system time of last mouse-move separately. This lets us debounce
+    // state writes (which trigger recomposition) without delaying intentional actions.
+    var lastMouseMoveRawMs by remember { mutableStateOf(0L) }
     var showSettings by remember { mutableStateOf(false) }
     var showEpisodes by remember { mutableStateOf(false) }
 
@@ -62,10 +66,15 @@ fun NativePlayerControls(
         PointerIcon(customCursor)
     }
 
-    LaunchedEffect(lastInteractionTime, showSettings, showSources, showEpisodes) {
+    LaunchedEffect(lastInteractionTime, showSettings, showSources, showEpisodes, isAppFocused) {
+        // If the app loses focus, immediately hide controls (without destroying the Popup window)
+        if (!isAppFocused) {
+            playerState.showControls.value = false
+            return@LaunchedEffect
+        }
         playerState.showControls.value = true
         if (!showSettings && !showSources && !showEpisodes) {
-            kotlinx.coroutines.delay(3000)
+            kotlinx.coroutines.delay(4000) // 4s auto-hide
             playerState.showControls.value = false
         }
     }
@@ -93,13 +102,22 @@ fun NativePlayerControls(
                 )
             }
             .onPointerEvent(PointerEventType.Move) {
-                lastInteractionTime = System.currentTimeMillis()
+                // Mouse-move fires at the monitor poll rate (60-120 Hz on desktop).
+                // Writing to a mutableStateOf every frame triggers a full recomposition each time,
+                // causing 60-120 recompositions/second and competing with MPV's render thread.
+                // We debounce by checking the raw clock before touching Compose state.
+                val now = System.currentTimeMillis()
+                if (now - lastMouseMoveRawMs > 500L) {
+                    lastMouseMoveRawMs = now
+                    lastInteractionTime = now
+                }
             }
             .onPointerEvent(PointerEventType.Press) {
                 lastInteractionTime = System.currentTimeMillis()
             }
             .onPointerEvent(PointerEventType.Scroll) { event ->
                 if (event.changes.any { it.isConsumed }) return@onPointerEvent
+                if (showSettings || showEpisodes || showSources) return@onPointerEvent
 
                 lastInteractionTime = System.currentTimeMillis()
                 // Mouse wheel volume control
@@ -155,25 +173,17 @@ fun NativePlayerControls(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 32.dp, vertical = 24.dp),
-                    onNextClick = if (hasNextEpisode) onNextEpisode else null,
-                    onPrevClick = if (hasPrevEpisode) onPrevEpisode else null,
                     onEpisodesClick = { showEpisodes = !showEpisodes },
-                    onAudioClick = {
+                    onSettingsClick = {
                         showSettings = true
                         showSettingsTab = 0
-                    },
-                    onSubtitlesClick = {
-                        showSettings = true
-                        showSettingsTab = 1
-                    },
-                    onSpeedClick = {
-                        showSettings = true
-                        showSettingsTab = 2
                     },
                     onSourcesClick = { onShowSourcesChange(true) },
                     onFullscreenClick = onFullscreenToggle,
                     isFullscreen = isFullscreen,
                     onAspectRatioClick = { playerState.cycleAspectRatio() },
+                    onSkipPrevious = if (hasPrevEpisode) onPrevEpisode else null,
+                    onSkipNext = if (hasNextEpisode) onNextEpisode else null,
                 )
             }
         }
@@ -185,6 +195,15 @@ fun NativePlayerControls(
         )
 
         // Side Panels and Dialogs
+        if (showEpisodes) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { showEpisodes = false }) }
+            )
+        }
+
         AnimatedVisibility(
             visible = showEpisodes,
             enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }),
@@ -212,6 +231,15 @@ fun NativePlayerControls(
                 lazySubtitleTracks = proxySubtitleTracks.map { PlayerState.LazyTrack(it.url, it.name, it.language) },
                 initialTab = showSettingsTab,
                 onDismissRequest = { showSettings = false },
+            )
+        }
+
+        if (showSources) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { onShowSourcesChange(false) }) }
             )
         }
 
