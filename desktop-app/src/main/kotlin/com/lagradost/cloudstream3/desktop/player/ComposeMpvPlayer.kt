@@ -98,6 +98,16 @@ fun ComposeMpvPlayer(
                             }
                         }
 
+                        if (eventId == 21 || eventId == 8) { // MPV_EVENT_PLAYBACK_RESTART or MPV_EVENT_FILE_LOADED
+                            if (!hasEverPlayed) {
+                                hasEverPlayed = true
+                                playbackStartedAt = System.currentTimeMillis()
+                                playerState?.isBuffering?.value = false
+                                playerState?.isProbing?.value = false
+                                currentOnPlaybackReady()
+                            }
+                        }
+
                         if (eventId == 22) { // MPV_EVENT_PROPERTY_CHANGE
                             val propPtr = event.data
                             if (propPtr != null) {
@@ -106,15 +116,15 @@ fun ComposeMpvPlayer(
                                 if (name != null && prop.format != 0 && prop.data != null) {
                                     when (name) {
                                         "time-pos" -> {
-                                            if (prop.format == 5) lastPos = prop.data!!.getDouble(0)
-                                            
-                                            if (!hasEverPlayed && lastPos > 0.0) {
-                                                hasEverPlayed = true
-                                                playbackStartedAt = System.currentTimeMillis()
-                                                playerState?.isBuffering?.value = false
-                                                playerState?.isProbing?.value = false
-                                                currentOnPlaybackReady()
-                                            }
+                                             if (prop.format == 5) lastPos = prop.data!!.getDouble(0)
+                                             
+                                             if (!hasEverPlayed && lastPos > 0.0) {
+                                                 hasEverPlayed = true
+                                                 playbackStartedAt = System.currentTimeMillis()
+                                                 playerState?.isBuffering?.value = false
+                                                 playerState?.isProbing?.value = false
+                                                 currentOnPlaybackReady()
+                                             }
 
                                             // One-shot diagnostic: 30s after playback starts,
                                             // log the actual rendering pipeline and frame stats.
@@ -137,19 +147,19 @@ fun ComposeMpvPlayer(
                                             }
 
                                             // Throttle UI position updates to 4 Hz max.
-                                            // MPV fires time-pos at video framerate (24-60 Hz),
-                                            // and each update triggers Compose recomposition of
-                                            // the seekbar + time labels, competing with MPV's
-                                            // render thread for GPU time.
-                                            val now = System.currentTimeMillis()
-                                            if (now - lastUiPositionEmit > 250) {
-                                                lastUiPositionEmit = now
-                                                val posMs = (lastPos * 1000).toLong()
-                                                playerState?.positionMs?.value = posMs
-                                                if (lastDur > 0) {
-                                                    currentOnPositionChange(posMs, (lastDur * 1000).toLong())
-                                                }
-                                            }
+                                             // MPV fires time-pos at video framerate (24-60 Hz),
+                                             // and each update triggers Compose recomposition of
+                                             // the seekbar + time labels, competing with MPV's
+                                             // render thread for GPU time.
+                                             val now = System.currentTimeMillis()
+                                             if (now - lastUiPositionEmit > 16) {
+                                                 lastUiPositionEmit = now
+                                                 val posMs = (lastPos * 1000).toLong()
+                                                 // Route through debouncer so stale time-pos events
+                                                 // from before a seek don't visually snap the slider back.
+                                                 playerState?.updatePositionFromPlayer(posMs)
+                                                 currentOnPositionChange(posMs, (lastDur * 1000).toLong())
+                                             }  
                                         }
                                         "duration" -> {
                                             if (prop.format == 5) lastDur = prop.data!!.getDouble(0)
@@ -198,8 +208,35 @@ fun ComposeMpvPlayer(
                             playerState?.bufferMs?.value = ((lastPos) * 1000).toLong()
                         }
 
-                    // Poll tracks less frequently
-                    if (loops % 25 == 0) {
+                        val currentDur = MpvLibrary.getPropertyString(h, "duration")?.toDoubleOrNull()
+                        if (currentDur != null && currentDur > 0.0) {
+                            lastDur = currentDur
+                            playerState?.durationMs?.value = (lastDur * 1000).toLong()
+                        }
+
+                        // Robust fallback: manually poll time-pos and duration
+                        val currentPos = MpvLibrary.getPropertyString(h, "time-pos")?.toDoubleOrNull()
+                        if (currentPos != null && currentPos >= 0.0) {
+                            lastPos = currentPos
+                            if (!hasEverPlayed && lastPos > 0.0) {
+                                hasEverPlayed = true
+                                playbackStartedAt = System.currentTimeMillis()
+                                playerState?.isBuffering?.value = false
+                                playerState?.isProbing?.value = false
+                                currentOnPlaybackReady()
+                            }
+                            
+                            // Emit to UI using the same throttle so it works even if native events are dropped!
+                            val now = System.currentTimeMillis()
+                            if (now - lastUiPositionEmit > 16) {
+                                lastUiPositionEmit = now
+                                val posMs = (lastPos * 1000).toLong()
+                                playerState?.updatePositionFromPlayer(posMs)
+                                currentOnPositionChange(posMs, (lastDur * 1000).toLong())
+                            }
+                        }
+
+                    // Poll tracks and stats (already throttled to 1000ms outside this)
                         val trackCountStr = MpvLibrary.getPropertyString(h, "track-list/count")
                         val trackCount = trackCountStr?.toIntOrNull() ?: 0
 
@@ -253,7 +290,6 @@ fun ComposeMpvPlayer(
                             playerState.videoBitrate.value = MpvLibrary.getPropertyString(h, "video-bitrate")?.toLongOrNull() ?: 0L
                             playerState.audioBitrate.value = MpvLibrary.getPropertyString(h, "audio-bitrate")?.toLongOrNull() ?: 0L
                         }
-                    }
                     loops++
 
                     // Check for completion
@@ -321,7 +357,7 @@ fun ComposeMpvPlayer(
         }
     }
 
-    LaunchedEffect(link, mpvHandle) {
+    LaunchedEffect(link.url, mpvHandle) {
         // IMPORTANT: Prevent the watcher loop from false-firing its idle-active check 
         // while we are setting up the new link.
         loadfileIssuedAt = 0L
@@ -347,25 +383,38 @@ fun ComposeMpvPlayer(
         lib.mpv_set_property_string(handle, "demuxer-lavf-o", "")
         lib.mpv_set_property_string(handle, "stream-lavf-o", "")
 
+        val headerStr = validated.headers.entries.joinToString(separator = "\r\n", postfix = "\r\n") { (k, v) ->
+            "$k: ${v.replace("\r", "").replace("\n", "")}"
+        }
+        val byteLength = headerStr.toByteArray(Charsets.UTF_8).size
+        val lavfHeaders = if (validated.headers.isNotEmpty()) ",headers=%$byteLength%$headerStr" else ""
+
         when (validated.streamKind) {
             PlayerLinkHandler.StreamKind.HLS -> {
                 lib.mpv_set_property_string(handle, "hls-bitrate", "max")
-                // Increase buffer size massively for high bitrate 4K streams
-                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "400000000")      // 400MB forward
-                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "100000000") // 100MB back
+                // 100MB forward is plenty for most 1080p HLS streams (segments are typically 2-6MB each).
+                // 400MB was causing CDN rate-limiting: MPV/FFmpeg would burst-request many segments
+                // at once to fill the cache, hitting 429 errors from Cloudflare/Akamai/Fastly after 20-30s.
+                lib.mpv_set_property_string(handle, "demuxer-max-bytes", "100000000")      // 100MB forward
+                lib.mpv_set_property_string(handle, "demuxer-max-back-bytes", "30000000")  // 30MB back
                 lib.mpv_set_property_string(handle, "cache", "yes")
-                lib.mpv_set_property_string(handle, "cache-secs", "60")       // 60s lookahead
-                lib.mpv_set_property_string(handle, "demuxer-readahead-secs", "60")
+                // 30s lookahead is aggressive but won't overwhelm CDNs the way 60s did.
+                lib.mpv_set_property_string(handle, "cache-secs", "30")
+                lib.mpv_set_property_string(handle, "demuxer-readahead-secs", "30")
                 lib.mpv_set_property_string(handle, "cache-pause-wait", "3")
 
                 // CRITICAL: Must use mpv_set_property_string here, NOT mpv_set_option_string!
                 // Options can only be set before mpv_initialize(). This runs after init,
-                // so mpv_set_option_string silently ignores the entire string — meaning
-                // reconnect flags, ignidx, igndts are all dead without this fix.
+                // so mpv_set_option_string silently ignores the entire string.
+                //
+                // NOTE: Do NOT include fflags=+ignidx+igndts here. Those flags disable FFmpeg's
+                // index loading and DTS decoding. For well-formed HLS this breaks packet reordering,
+                // causing progressive A/V desync that only becomes visible once the initial buffer
+                // drains (~20-30s). extension_picky=0 alone is sufficient to accept non-standard URLs.
                 lib.mpv_set_property_string(
                     handle,
                     "demuxer-lavf-o",
-                    "extension_picky=0,fflags=+ignidx+igndts,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx,5xx",
+                    "extension_picky=0,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx$lavfHeaders",
                 )
                 // Allow demuxer to seek ahead aggressively:
                 lib.mpv_set_property_string(handle, "demuxer-seekable-cache", "yes")
@@ -377,10 +426,11 @@ fun ComposeMpvPlayer(
                 val lavfDashOpts = buildString {
                     // Reconnect on HTTP errors. Commas MUST be avoided in the value to prevent
                     // corrupting MPV's option parser (which uses commas to separate key=val pairs).
-                    append("reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx")
+                    append("extension_picky=0,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx")
                     if (validated.clearKeyHex != null) {
                         append(",cenc_decryption_key=${validated.clearKeyHex}")
                     }
+                    append(lavfHeaders)
                 }
                 lib.mpv_set_property_string(handle, "demuxer-lavf-o", lavfDashOpts)
                 // DASH: 30MB forward buffer is plenty for 1080p segments (~4MB each)
@@ -395,13 +445,14 @@ fun ComposeMpvPlayer(
                 lib.mpv_set_property_string(
                     handle,
                     "demuxer-lavf-o",
-                    "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx",
+                    "extension_picky=0,reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,reconnect_on_http_error=4xx$lavfHeaders",
                 )
                 // Stream-level reconnect is critical for live MPEG-TS over HTTP.
+                // Setting method=GET prevents Cloudflare Workers from returning 403 Forbidden to HEAD requests.
                 lib.mpv_set_property_string(
                     handle,
                     "stream-lavf-o",
-                    "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4",
+                    "reconnect=1,reconnect_streamed=1,reconnect_delay_max=4,method=GET",
                 )
                 // MKV/MP4 files from CDNs like Pixeldrain often use one-time download links.
                 // Seeking forces MPV to open a new HTTP connection with a Range header, which returns 404.
@@ -493,7 +544,7 @@ fun ComposeMpvPlayer(
         }
 
         val capturedHandle = handle
-        kotlin.concurrent.thread(isDaemon = true) {
+        launch(kotlinx.coroutines.Dispatchers.IO) {
             var attempts = 0
             while (attempts < 150) {
                 // Guard: mpv handle may be destroyed if user navigates away quickly.
@@ -504,8 +555,16 @@ fun ComposeMpvPlayer(
                 } catch (e: Error) {
                     break // JNA native crash guard — handle was freed
                 }
-                if ((posStr?.toDoubleOrNull() ?: 0.0) > 0.0) break
-                Thread.sleep(200)
+                if ((posStr?.toDoubleOrNull() ?: 0.0) > 0.0) {
+                    if (!hasEverPlayed) {
+                        hasEverPlayed = true
+                        playerState?.isBuffering?.value = false
+                        playerState?.isProbing?.value = false
+                        currentOnPlaybackReady()
+                    }
+                    break
+                }
+                kotlinx.coroutines.delay(200)
                 attempts++
             }
 
@@ -524,6 +583,9 @@ fun ComposeMpvPlayer(
 
     val videoCanvas = remember {
         object : java.awt.Canvas() {
+            init {
+                background = java.awt.Color.BLACK
+            }
             var keyDispatcher: java.awt.KeyEventDispatcher? = null
 
             // CRITICAL: Override paint/update to prevent AWT from clearing
@@ -668,14 +730,28 @@ fun ComposeMpvPlayer(
                     focusManager.removeKeyEventDispatcher(it)
                 }
 
-                mpvHandle?.let { MpvLibrary.INSTANCE.mpv_terminate_destroy(it) }
-                mpvHandle = null
-                playerState?.detachMpv()
+                val h = mpvHandle
+                if (h != null) {
+                    mpvHandle = null
+                    MpvLibrary.INSTANCE.mpv_terminate_destroy(h)
+                    playerState?.detachMpv()
+                }
                 super.removeNotify()
             }
         }.apply {
             background = Color.BLACK
             isFocusable = true
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val h = mpvHandle
+            if (h != null) {
+                mpvHandle = null
+                MpvLibrary.INSTANCE.mpv_terminate_destroy(h)
+                playerState?.detachMpv()
+            }
         }
     }
 
