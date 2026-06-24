@@ -75,15 +75,36 @@ object PlayerLinkHandler {
             else -> StreamKind.PROGRESSIVE
         }
 
+        var clearKeyHex: String? = null
+        if (link is com.lagradost.cloudstream3.utils.DrmExtractorLink) {
+            val isClearKey = link.uuid == com.lagradost.cloudstream3.utils.CLEARKEY_DRM_UUID
+            if (isClearKey && !link.key.isNullOrBlank()) {
+                clearKeyHex = try {
+                    val decoded = java.util.Base64.getUrlDecoder().decode(link.key!!)
+                    decoded.joinToString("") { "%02x".format(it) }
+                } catch(e: Exception) {
+                    try {
+                        val decoded = java.util.Base64.getDecoder().decode(link.key!!)
+                        decoded.joinToString("") { "%02x".format(it) }
+                    } catch(e2: Exception) {
+                        null
+                    }
+                }
+            }
+        }
+
         // For HLS streams, route through the LocalStreamProxy.
         // The proxy fetches the .m3u8 manifest, rewrites all segment URLs to go through
         // localhost:8080, and injects the correct auth headers on every segment request.
         // This makes the stream appear as a seamless local HLS feed to MPV.
         // Without this, MPV receives raw tokenized CDN segment URLs which can expire
         // mid-stream, causing broken-pieces playback.
-        // We also route PROGRESSIVE/DASH streams through the proxy to prevent FFmpeg from 
-        // sending HTTP HEAD requests directly to Cloudflare Workers, which often results in 403 Forbidden.
-        val useProxy = true
+        val useProxy = when (kind) {
+            StreamKind.HLS -> true
+            StreamKind.DASH -> clearKeyHex != null // Only use proxy for DRM DASH for manifest rewriting
+            StreamKind.PROGRESSIVE -> false
+        }
+        
         var finalSessionId: String? = null
         val finalUrl = if (useProxy) {
             val sessionId = com.lagradost.player.impl.proxy.LocalStreamProxy.registerSession(headers)
@@ -119,23 +140,7 @@ object PlayerLinkHandler {
         } else {
             link.audioTracks
         }
-        var clearKeyHex: String? = null
-        if (link is com.lagradost.cloudstream3.utils.DrmExtractorLink) {
-            val isClearKey = link.uuid == com.lagradost.cloudstream3.utils.CLEARKEY_DRM_UUID
-            if (isClearKey && !link.key.isNullOrBlank()) {
-                clearKeyHex = try {
-                    val decoded = java.util.Base64.getUrlDecoder().decode(link.key!!)
-                    decoded.joinToString("") { "%02x".format(it) }
-                } catch(e: Exception) {
-                    try {
-                        val decoded = java.util.Base64.getDecoder().decode(link.key!!)
-                        decoded.joinToString("") { "%02x".format(it) }
-                    } catch(e2: Exception) {
-                        null
-                    }
-                }
-            }
-        }
+
 
         return Result.success(
             ValidatedLink(

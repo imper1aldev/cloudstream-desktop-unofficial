@@ -336,6 +336,7 @@ object LocalStreamProxy {
                 // Since OkHttp's readTimeout is robust (60s), we no longer need the unbounded 
                 // channel buffer. Stream directly to Ktor to avoid GC allocation churn from 
                 // array copies.
+                call.response.header("Connection", "close")
                 call.respondBytesWriter(
                     contentType = parsedContentType,
                     status = HttpStatusCode.fromValue(response.code),
@@ -346,74 +347,80 @@ object LocalStreamProxy {
                     val ktorChannel = this
                     val buffer = ByteArray(65536)
                     var totalBytesRead = 0L
+                    // Clear loading popup since we are now streaming data directly to MPV!
+                    LocalStreamProxyState.loadingStatus.value = null
 
-                    while (true) {
-                        try {
-                            var bytesRead: Int
-                            withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                while (streamSource.read(buffer).also { bytesRead = it } != -1) {
-                                    ktorChannel.writeFully(buffer, 0, bytesRead)
-                                    totalBytesRead += bytesRead
-                                }
-                            }
-                            break // EOF reached naturally
-                        } catch (e: Exception) {
-                            // If Ktor's channel is closed, the client (MPV) disconnected. Stop proxying.
-                            if (ktorChannel.isClosedForWrite) {
-                                break
-                            }
-
-                            // If we don't know the total size and it's chunked, or we reached the known size, we're done.
-                            val cl = currentResponse?.body?.contentLength() ?: -1L
-                            if (cl != -1L && totalBytesRead >= cl) {
-                                break
-                            }
-
-                            AppLogger.w("CDN connection dropped mid-stream at $totalBytesRead/$cl bytes. Resuming transparently...")
-                            withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                currentResponse?.body?.close()
-                            }
-
-                            // Transparently reconnect and resume from totalBytesRead
-                            val resumeBuilder = requestBuilder.build().newBuilder()
-                            val origRange = mergedHeaders["Range"]
-                            if (origRange != null && origRange.startsWith("bytes=", ignoreCase = true)) {
-                                val startPart = origRange.substringAfter("=").substringBefore("-").toLongOrNull() ?: 0L
-                                val endPart = origRange.substringAfter("-")
-                                val newStart = startPart + totalBytesRead
-                                resumeBuilder.header("Range", "bytes=$newStart-$endPart")
-                            } else {
-                                resumeBuilder.header("Range", "bytes=$totalBytesRead-")
-                            }
-
-                            var retrySuccess = false
-                            for (attempt in 1..3) {
-                                try {
-                                    currentResponse = proxyClient.newCall(resumeBuilder.build()).await()
-                                    if (currentResponse!!.isSuccessful) {
-                                        streamSource = currentResponse!!.body?.source() ?: throw Exception("No body")
-                                        if (currentResponse!!.code == 200 && totalBytesRead > 0) {
-                                            // The CDN ignored our Range request and returned the full file.
-                                            // We MUST manually skip the bytes we've already streamed to MPV!
-                                            streamSource.skip(totalBytesRead)
-                                        }
-                                        retrySuccess = true
-                                        break
+                    try {
+                        while (true) {
+                            try {
+                                var bytesRead: Int
+                                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    while (streamSource.read(buffer).also { bytesRead = it } != -1) {
+                                        ktorChannel.writeFully(buffer, 0, bytesRead)
+                                        totalBytesRead += bytesRead
                                     }
-                                } catch (retryEx: Exception) {
-                                    kotlinx.coroutines.delay(500L * attempt)
                                 }
-                            }
+                                break // EOF reached naturally
+                            } catch (e: Exception) {
+                                // If Ktor's channel is closed, the client (MPV) disconnected. Stop proxying.
+                                if (ktorChannel.isClosedForWrite) {
+                                    break
+                                }
 
-                            if (!retrySuccess) {
-                                AppLogger.e("Failed to transparently resume CDN stream.")
-                                throw e // Abort and let MPV handle the error
+                                // If we don't know the total size and it's chunked, or we reached the known size, we're done.
+                                val cl = currentResponse?.body?.contentLength() ?: -1L
+                                if (cl != -1L && totalBytesRead >= cl) {
+                                    break
+                                }
+
+                                AppLogger.w("CDN connection dropped mid-stream at $totalBytesRead/$cl bytes. Resuming transparently...")
+                                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    currentResponse?.body?.close()
+                                }
+
+                                // Transparently reconnect and resume from totalBytesRead
+                                val resumeBuilder = requestBuilder.build().newBuilder()
+                                val origRange = mergedHeaders["Range"]
+                                if (origRange != null && origRange.startsWith("bytes=", ignoreCase = true)) {
+                                    val startPart = origRange.substringAfter("=").substringBefore("-").toLongOrNull() ?: 0L
+                                    val endPart = origRange.substringAfter("-")
+                                    val newStart = startPart + totalBytesRead
+                                    resumeBuilder.header("Range", "bytes=$newStart-$endPart")
+                                } else {
+                                    resumeBuilder.header("Range", "bytes=$totalBytesRead-")
+                                }
+
+                                var retrySuccess = false
+                                for (attempt in 1..3) {
+                                    try {
+                                        currentResponse = proxyClient.newCall(resumeBuilder.build()).await()
+                                        if (currentResponse!!.isSuccessful) {
+                                            streamSource = currentResponse!!.body?.source() ?: throw Exception("No body")
+                                            if (currentResponse!!.code == 200 && totalBytesRead > 0) {
+                                                // The CDN ignored our Range request and returned the full file.
+                                                // We MUST manually skip the bytes we've already streamed to MPV!
+                                                streamSource.skip(totalBytesRead)
+                                            }
+                                            retrySuccess = true
+                                            break
+                                        }
+                                    } catch (retryEx: Exception) {
+                                        kotlinx.coroutines.delay(500L * attempt)
+                                    }
+                                }
+
+                                if (!retrySuccess) {
+                                    AppLogger.e("Failed to transparently resume CDN stream.")
+                                    throw e // Abort and let MPV handle the error
+                                }
                             }
                         }
-                    }
-
-                    withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        currentResponse?.body?.close()
+                    } finally {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                currentResponse?.body?.close()
+                            } catch (ignored: Exception) {}
+                        }
                     }
                 }
             }
@@ -593,8 +600,10 @@ object LocalStreamProxy {
                     }
                 } else {
                     val absolute = resolveUrl(baseUrl, trim)
-                    // Scenario A: Direct download of video segments!
-                    appendLine(absolute)
+                    // Proxy video segments through OkHttp to benefit from TLS connection pooling
+                    // and keep-alive, which FFmpeg natively struggles with on HTTPS streams.
+                    val proxied = buildProxyUrl(sessionId, absolute)
+                    appendLine(proxied)
                 }
             }
         }
