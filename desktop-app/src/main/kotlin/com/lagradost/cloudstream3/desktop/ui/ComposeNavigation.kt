@@ -32,6 +32,17 @@ val LocalVideoPlayer = androidx.compose.runtime.staticCompositionLocalOf<(VideoL
 val LocalWindowState = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.window.WindowState?> { null }
 val LocalComposeWindow = androidx.compose.runtime.staticCompositionLocalOf<java.awt.Window?> { null }
 
+/**
+ * Provides real AWT exclusive fullscreen control across the entire Compose tree.
+ * Uses GraphicsDevice.setFullScreenWindow() which is the only way to get true fullscreen on Windows
+ * (WindowPlacement.Fullscreen is "fake" — the OS title bar and taskbar still render on top).
+ */
+data class FullscreenController(
+    val isFullscreen: androidx.compose.runtime.MutableState<Boolean>,
+    val toggle: () -> Unit,
+)
+val LocalFullscreenController = androidx.compose.runtime.staticCompositionLocalOf<FullscreenController?> { null }
+
 @Composable
 fun CloudstreamApp() {
     val navController = remember { NavController() }
