@@ -32,6 +32,7 @@ fun BrowseTab(viewModel: ExtensionsViewModel, syncGeneration: Int) {
     val isFetching by viewModel.isFetching.collectAsState()
     val statusText by viewModel.statusText.collectAsState()
     val pluginRequiringBypass by viewModel.pluginRequiringBypass.collectAsState()
+    val pluginRequiringPermission by viewModel.pluginRequiringPermission.collectAsState()
 
     val languages = remember(plugins) {
         listOf("All") + plugins.mapNotNull { it.second.language?.takeIf { l -> l.isNotBlank() } }.distinct().sorted()
@@ -253,6 +254,28 @@ fun BrowseTab(viewModel: ExtensionsViewModel, syncGeneration: Int) {
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.clearBypass() }) {
+                        Text("Cancel")
+                    }
+                },
+            )
+        }
+
+        pluginRequiringPermission?.let { (reqRepo, reqPlugin, reqPermission) ->
+            AlertDialog(
+                onDismissRequest = { viewModel.clearPermissionRequest() },
+                title = { Text("Permission Required") },
+                text = { Text("The plugin '${reqPlugin.name}' requires the following permission to function:\n\n• $reqPermission\n\nDo you want to grant this permission and install the plugin?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.grantPermissionAndInstall(reqRepo, reqPlugin, reqPermission)
+                        },
+                    ) {
+                        Text("Grant & Install", color = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.clearPermissionRequest() }) {
                         Text("Cancel")
                     }
                 },

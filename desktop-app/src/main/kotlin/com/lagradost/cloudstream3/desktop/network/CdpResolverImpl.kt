@@ -37,6 +37,7 @@ object CdpResolverImpl {
                     "--headless",
                     "--disable-gpu",
                     "--disable-blink-features=AutomationControlled",
+                    "--mute-audio",
                     "--remote-debugging-port=0",
                     "--user-data-dir=${tempDir.absolutePath}",
                 )

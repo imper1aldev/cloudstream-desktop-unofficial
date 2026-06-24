@@ -6,7 +6,10 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
     override fun loadClass(name: String, resolve: Boolean): Class<*> {
         // Prevent loading dangerous packages directly from the plugin bytecode
         if (isBlocked(name)) {
-            throw SecurityException("Security Sandbox: Access to class '$name' is blocked.")
+            val pluginName = ExtensionLoader.getCallingPluginName() ?: "Unknown Plugin"
+            if (!PermissionManager.hasPermission(pluginName, name)) {
+                throw SecurityException("Security Sandbox: Access to class '$name' is blocked.")
+            }
         }
         return try {
             super.loadClass(name, resolve)
@@ -186,5 +189,44 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
         }
 
         return false
+    }
+}
+
+object PermissionManager {
+    private val mapper = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
+    private val prefs = java.util.prefs.Preferences.userRoot().node("cloudstream_desktop_permissions")
+
+    fun hasPermission(pluginName: String, className: String): Boolean {
+        val grantedMap = getGrantedPermissions()
+        val pluginPermissions = grantedMap[pluginName] ?: return false
+        return pluginPermissions.contains(className) || pluginPermissions.contains("Network Sockets")
+    }
+
+    fun grantPermission(pluginName: String, permission: String) {
+        val grantedMap = getGrantedPermissions()
+        val pluginPermissions = grantedMap[pluginName] ?: mutableListOf()
+        if (!pluginPermissions.contains(permission)) {
+            pluginPermissions.add(permission)
+            grantedMap[pluginName] = pluginPermissions
+            saveGrantedPermissions(grantedMap)
+            println("[Security] User granted permission '$permission' to plugin $pluginName")
+        }
+    }
+
+    private fun getGrantedPermissions(): java.util.concurrent.ConcurrentHashMap<String, MutableList<String>> {
+        val json = prefs.get("granted", "{}")
+        return try {
+            mapper.readValue(json, object : com.fasterxml.jackson.core.type.TypeReference<java.util.concurrent.ConcurrentHashMap<String, MutableList<String>>>() {})
+        } catch (e: Exception) {
+            java.util.concurrent.ConcurrentHashMap()
+        }
+    }
+
+    private fun saveGrantedPermissions(map: java.util.concurrent.ConcurrentHashMap<String, MutableList<String>>) {
+        try {
+            prefs.put("granted", mapper.writeValueAsString(map))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

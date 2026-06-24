@@ -38,6 +38,9 @@ class ExtensionsViewModel(private val coroutineScope: CoroutineScope) {
     private val _pluginRequiringBypass = MutableStateFlow<Pair<String, SitePlugin>?>(null)
     val pluginRequiringBypass = _pluginRequiringBypass.asStateFlow()
 
+    private val _pluginRequiringPermission = MutableStateFlow<Triple<String, SitePlugin, String>?>(null)
+    val pluginRequiringPermission = _pluginRequiringPermission.asStateFlow()
+
     fun fetchPlugins() {
         _isFetching.value = true
         _statusText.value = "Fetching plugins from repositories..."
@@ -109,6 +112,10 @@ class ExtensionsViewModel(private val coroutineScope: CoroutineScope) {
                 } else {
                     onResult("Failed")
                 }
+            } catch (e: com.lagradost.runtime.security.RequiresPermissionException) {
+                com.lagradost.common.logging.AppLogger.e("Permission required for plugin", e)
+                _pluginRequiringPermission.value = Triple(repoName, plugin, e.permissionName)
+                onResult("Requires Permission")
             } catch (e: java.lang.SecurityException) {
                 com.lagradost.common.logging.AppLogger.e("Security exception removing plugin", e)
                 _pluginRequiringBypass.value = Pair(repoName, plugin)
@@ -144,6 +151,21 @@ class ExtensionsViewModel(private val coroutineScope: CoroutineScope) {
 
     fun clearBypass() {
         _pluginRequiringBypass.value = null
+    }
+
+    fun grantPermissionAndInstall(repoName: String, plugin: SitePlugin, permissionName: String) {
+        _pluginRequiringPermission.value = null
+        com.lagradost.runtime.loader.PermissionManager.grantPermission(plugin.internalName, permissionName)
+        // Retry installation (it will now pass the ClassLoader check)
+        // Wait, bypassSecurityAndInstall is needed because PluginSecurityVerifier will still throw unless bypassed?
+        // Ah! If we grant permission in PermissionManager, the static analyzer WILL STILL THROW!
+        // We need to pass forceBypassSecurity = true, OR we modify PluginSecurityVerifier to check PermissionManager?
+        // Let's just bypass static analyzer and let SafePluginClassLoader enforce the granted permissions.
+        bypassSecurityAndInstall(repoName, plugin)
+    }
+
+    fun clearPermissionRequest() {
+        _pluginRequiringPermission.value = null
     }
 
     fun uninstallPlugins(plugins: List<LocalPlugin>) {

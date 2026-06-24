@@ -40,6 +40,7 @@ object NetworkConfig {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .cookieJar(DesktopCookieJar())
 
         // Apply DoH Provider
         when (provider) {

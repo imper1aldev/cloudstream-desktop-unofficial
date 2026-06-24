@@ -91,7 +91,7 @@ compose.desktop {
 
         nativeDistributions {
             // Windows only — no Mac or Linux targets
-            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
+            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.AppImage)
             packageName = "CloudStream-Desktop"
             packageVersion = "0.1.1"
             description = "CloudStream Desktop Client"
@@ -116,7 +116,10 @@ compose.desktop {
                 "jdk.crypto.mscapi", // Required on Windows for some HTTPS cert verifications
                 "jdk.management",
                 "jdk.charsets", // Required to decode some foreign websites
-                "jdk.zipfs" // Required by dex2jar for JAR generation
+                "jdk.zipfs", // Required by dex2jar for JAR generation
+                "java.compiler", // Required by Rhino JS compiler
+                "jdk.compiler", // Required by Rhino JS compiler
+                "jdk.localedata" // Required by Rhino JS Date functions
             )
             appResourcesRootDir.set(project.layout.projectDirectory.dir("appResources"))
 

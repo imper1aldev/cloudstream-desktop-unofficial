@@ -73,6 +73,10 @@ private fun loadInstalledPlugins() {
             // Likely a NoClassDefFoundError due to arbitrary load order. Queue for retry.
             retryQueue.add(jarFile)
             AppLogger.e("Deferred loading of ${jarFile.name} (dependency not met yet?)")
+            // Clean up potentially partial state so second pass doesn't duplicate them
+            ExtensionLoader.plugins.remove(jarFile.absolutePath)
+            com.lagradost.cloudstream3.utils.extractorApis.removeAll { it.sourcePlugin == jarFile.absolutePath }
+            com.lagradost.cloudstream3.APIHolder.allProviders.removeAll { it.sourcePlugin == jarFile.absolutePath }
         }
     }
 
@@ -81,13 +85,15 @@ private fun loadInstalledPlugins() {
         try {
             ExtensionLoader.loadAndInit(jarFile)
             loaded++
+            failed--
         } catch (e: Throwable) {
             failed++
-            AppLogger.e("Failed to load plugin ${jarFile.name} even after retry: ${e.message}")
+            AppLogger.e("Failed to load plugin: ${jarFile.name}", e)
         }
     }
     
     AppLogger.i("Plugin loading complete: $loaded loaded, $failed failed (of ${jarFiles.size} total)")
+    AppLogger.i("Loaded ${loaded} plugins successfully! Extractor count: ${com.lagradost.cloudstream3.utils.extractorApis.size}")
 }
 
 /**

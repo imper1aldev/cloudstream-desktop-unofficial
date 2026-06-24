@@ -216,8 +216,10 @@ fun ComposeHomeScreen(
                 }
             }
         } else {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No content available for this provider.")
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HomeHeroCarouselPlaceholder()
+                }
             }
 
             HomeTopBar(

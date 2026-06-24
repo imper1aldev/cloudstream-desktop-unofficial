@@ -62,7 +62,7 @@ fun HomeCategorySection(
                             errorMessage = "No items found."
                         }
                     } catch (e: Throwable) {
-                        DesktopErrorReporter.report("getMainPage failed for ${pageData.name}", e)
+                        DesktopErrorReporter.report("getMainPage failed for ${provider.name} - ${pageData.name.ifBlank { "Unknown Category" }}", e)
                         errorMessage = e.localizedMessage ?: "Connection error"
                     }
                 }
@@ -166,7 +166,9 @@ fun HomeCategorySection(
                 }
             }
         } else {
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
+            val minHeight = if (isFirstPage) 350.dp else 150.dp
+            val topPadding = if (isFirstPage) 80.dp else 0.dp
+            Box(modifier = Modifier.fillMaxWidth().height(minHeight).padding(top = topPadding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         errorMessage ?: "Failed to load category.",

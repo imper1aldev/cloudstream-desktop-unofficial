@@ -66,13 +66,16 @@ object PluginSecurityVerifier {
 
                                     // GAP FIX #3: Block raw HttpURLConnection / URLConnection
                                     // Prevents plugins from making untracked, unmetered HTTP requests
-                                    // that bypass OkHttp, the CloudflareKiller interceptor, and
-                                    // the app's user-agent / header management.
                                     if (owner == "java/net/HttpURLConnection" ||
                                         owner == "java/net/URLConnection" ||
                                         owner == "javax/net/ssl/HttpsURLConnection"
                                     ) {
-                                        throw SecurityException("Security Sandbox: Illegal raw HTTP connection in ${classNode.name}. Use the NiceHttp `app` object instead.")
+                                        throw RequiresPermissionException("Network Sockets", "Security Sandbox: Illegal raw HTTP connection in ${classNode.name}. Plugin requires 'Network Sockets' permission.")
+                                    }
+
+                                    // Detect raw Sockets (e.g. for proxy servers)
+                                    if (owner == "java/net/Socket" || owner == "java/net/ServerSocket" || owner == "java/net/DatagramSocket") {
+                                        throw RequiresPermissionException("Network Sockets", "Security Sandbox: Raw socket access detected in ${classNode.name}. Plugin requires 'Network Sockets' permission.")
                                     }
 
                                     // Block specific dangerous System calls
@@ -90,3 +93,5 @@ object PluginSecurityVerifier {
         }
     }
 }
+
+class RequiresPermissionException(val permissionName: String, message: String) : SecurityException(message)
