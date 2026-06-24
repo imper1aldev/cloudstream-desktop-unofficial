@@ -62,3 +62,10 @@ spotless_*.txt
 *.orig
 .env
 secrets.properties
+
+# Build/Dev logs and output
+dev_err.txt
+dev_out.txt
+exe_err.txt
+exe_out.txt
+installer/
