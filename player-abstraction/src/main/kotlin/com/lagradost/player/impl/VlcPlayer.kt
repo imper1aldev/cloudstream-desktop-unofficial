@@ -51,7 +51,7 @@ class VlcPlayer : MediaPlayer {
                 val vlcExecutable = findVlcExecutable()
                     ?: run {
                         _state.update { state -> state.copy(isLoading = false, error = "VLC not found") }
-                        return@withContext Result.failure(IllegalStateException("VLC not found. Install VLC or use MPV."))
+                        return@withContext Result.failure(IllegalStateException("VLC not found. Install VLC or use the internal player."))
                     }
 
                 val startSec = startPositionMs / 1000L

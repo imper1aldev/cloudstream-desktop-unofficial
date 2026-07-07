@@ -47,7 +47,7 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
 
     val coroutineScope = rememberCoroutineScope()
     val playVideo = com.lagradost.cloudstream3.desktop.ui.LocalVideoPlayer.current
-    var selectedPlayer by remember { mutableStateOf(DesktopDataStore.getKey<String>("preferred_player") ?: "mpv") }
+    var selectedPlayer by remember { mutableStateOf(DesktopDataStore.getKey<String>("preferred_player") ?: "vlc") }
     var isLaunchingPlayer by remember { mutableStateOf(false) }
     var playerLaunchError by remember { mutableStateOf<String?>(null) }
     var scrapeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -142,12 +142,7 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
             } else {
                 isLaunchingPlayer = true
                 currentPlayingUrl = link.url
-                val effectivePlayer =
-                    if (selectedPlayer == "vlc" && PlayerLinkHandler.shouldPreferMpv(link)) {
-                        "mpv"
-                    } else {
-                        selectedPlayer
-                    }
+                val effectivePlayer = selectedPlayer
                 statusText = "Launching ${effectivePlayer.uppercase()}..."
 
                 val latestHistory = DesktopDataStore.getEpisodeWatched(history.parentId, history.episodeId) ?: history
@@ -409,7 +404,7 @@ private fun PlayerSelector(selectedPlayer: String, onSelect: (String) -> Unit) {
         FilterChip(
             selected = selectedPlayer == "mpv",
             onClick = { onSelect("mpv") },
-            label = { Text("MPV") },
+            label = { Text("Internal") },
             colors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = DesktopUi.AccentSoft,
                 selectedLabelColor = DesktopUi.Accent,

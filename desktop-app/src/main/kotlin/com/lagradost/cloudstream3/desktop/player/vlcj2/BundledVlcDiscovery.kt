@@ -1,4 +1,4 @@
-package com.lagradost.cloudstream3.desktop.player.vlcj
+package com.lagradost.cloudstream3.desktop.player.vlcj2
 
 import com.lagradost.common.logging.AppLogger
 import java.io.File

@@ -1,4 +1,4 @@
-package com.lagradost.cloudstream3.desktop.ui.screens.player
+package com.lagradost.cloudstream3.desktop.player.vlcj2
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -12,10 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
-import com.lagradost.cloudstream3.desktop.player.vlcj.BundledVlcDiscovery
-import com.lagradost.cloudstream3.desktop.player.vlcj.VlcjEngine
-import com.lagradost.cloudstream3.desktop.player.vlcj.VlcjPlayerState
-import com.lagradost.cloudstream3.desktop.player.vlcj.VlcjVideoSurface
+import com.lagradost.cloudstream3.desktop.player.vlcj2.BundledVlcDiscovery
 import com.lagradost.cloudstream3.desktop.ui.LocalWindowState
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.common.logging.AppLogger
@@ -23,23 +20,32 @@ import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.player.impl.PlayerLinkHandler
 import kotlinx.coroutines.delay
 
-private const val TAG = "VlcjPlayerScreen"
+private const val TAG = "Vlcj2PlayerScreen"
 
 /**
- * Full-screen video player using VLCJ (libvlc) via direct rendering.
- * A drop-in replacement for [com.lagradost.cloudstream3.desktop.ui.screens.player.EmbeddedVideoPlayer].
+ * Minimal VLCJ2 player screen for Phase 0 baseline validation.
+ *
+ * Mirrors [com.lagradost.cloudstream3.desktop.ui.screens.player.VlcjPlayerScreen]
+ * API but drives the vlcj2-based [Vlcj2Engine] and [Vlcj2VideoSurface].
+ *
+ * Lifecycle:
+ *   1. LaunchedEffect discover → initialize engine → set engineReady
+ *   2. LaunchedEffect(engineReady) triggers playLink on first link
+ *   3. LaunchedEffect poll loop tracks positionMs/durationMs, detects finish
+ *   4. DisposableEffect on close → engine.release() + watch-history save
+ *
+ * States: loading → playing → finished (or error).
  */
 @Composable
-fun VlcjPlayerScreen(
+fun Vlcj2PlayerScreen(
     launchData: VideoLaunchData,
     onClose: () -> Unit,
 ) {
     val windowState = LocalWindowState.current
     val isFullscreen = windowState?.placement == WindowPlacement.Fullscreen
 
-    // ── Engine lifecycle ─────────────────────────────────────────
-    val engine = remember { VlcjEngine() }
-
+    // ── Engine lifecycle ─────────────────────────────────────────────
+    val engine = remember { Vlcj2Engine() }
     var engineReady by remember { mutableStateOf(false) }
     var engineError by remember { mutableStateOf<String?>(null) }
 
@@ -47,16 +53,16 @@ fun VlcjPlayerScreen(
         val found = BundledVlcDiscovery.discover()
         if (!found) {
             engineError = "VLC native libraries not found.\n" +
-                    "Ensure libvlc.dll is bundled in app resources."
+                "Ensure libvlc.dll is bundled in app resources."
             return@LaunchedEffect
         }
         try {
-            engine.initialise()
+            engine.initialize()
             engineReady = true
-            AppLogger.i("$TAG — VLCJ engine initialised")
+            AppLogger.i("$TAG — engine initialized")
         } catch (e: Exception) {
             AppLogger.e("$TAG — engine init failed", e)
-            engineError = "VLCJ engine failed: ${e.message}"
+            engineError = "VLCJ2 engine failed: ${e.message}"
         }
     }
 
@@ -67,37 +73,32 @@ fun VlcjPlayerScreen(
         }
     }
 
-    // ── Playback state ─────────────────────────────────────────
-    var currentLinkIndex by remember { mutableStateOf(launchData.initialIndex) }
-    val autoPlay = DesktopDataStore
-        .getKey<Boolean>(com.lagradost.cloudstream3.desktop.player.PlayerConfig.PREF_AUTO_PLAY) ?: true
-
+    // ── Playback state ───────────────────────────────────────────────
+    val currentLinkIndex = launchData.initialIndex
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isFinished by remember { mutableStateOf(false) }
     var lastPositionSec by remember { mutableStateOf(0L) }
     var lastDurationSec by remember { mutableStateOf(0L) }
-    var lastSavedPositionSec by remember { mutableStateOf(0L) }
 
     // Save watch history on close
     DisposableEffect(Unit) {
         onDispose {
             if (lastDurationSec > 0 && lastPositionSec > 0) {
-                val updatedHistory = launchData.history.copy(
-                    position = lastPositionSec,
-                    duration = lastDurationSec,
-                    updateTime = System.currentTimeMillis(),
+                DesktopDataStore.setLastWatched(
+                    launchData.history.copy(
+                        position = lastPositionSec,
+                        duration = lastDurationSec,
+                        updateTime = System.currentTimeMillis(),
+                    )
                 )
-                DesktopDataStore.setLastWatched(updatedHistory)
             }
         }
     }
 
-    // ── Playback guard ───────────────────────────────────────────
-    // Prevents double play() when LaunchedEffect re-fires.
+    // ── Playback launcher ──────────────────────────────────────────
     var playStarted by remember { mutableStateOf(false) }
 
-    // ── Playback launcher ──────────────────────────────────────
     fun playLink(index: Int) {
         val link = launchData.links.getOrNull(index) ?: run {
             errorMessage = "No link at index $index"
@@ -112,9 +113,7 @@ fun VlcjPlayerScreen(
             return
         }
 
-        // Build headers list for VLCJ
         val headers = validated.headers.map { "${it.key}: ${it.value}" }
-
         engine.play(
             url = validated.url,
             title = validated.displayTitle.ifBlank { launchData.title },
@@ -123,7 +122,6 @@ fun VlcjPlayerScreen(
         )
     }
 
-    // Start playback once engine is ready
     LaunchedEffect(engineReady) {
         if (engineReady && !playStarted) {
             playStarted = true
@@ -131,7 +129,7 @@ fun VlcjPlayerScreen(
         }
     }
 
-    // ── Position & finish polling ──────────────────────────────
+    // ── Position & finish polling ──────────────────────────────────
     LaunchedEffect(engineReady) {
         if (!engineReady) return@LaunchedEffect
 
@@ -140,21 +138,9 @@ fun VlcjPlayerScreen(
 
             if (engine.isFinished) {
                 if (isLoading) {
-                    // Finished before first frame — treat as error
-                    if (autoPlay && currentLinkIndex + 1 < launchData.links.size) {
-                        currentLinkIndex++
-                        playLink(currentLinkIndex)
-                    } else {
-                        isLoading = false
-                        if (launchData.onError != null) {
-                            launchData.onError.invoke("Stream failed to load")
-                            onClose()
-                        } else {
-                            errorMessage = "Stream failed to load or ended instantly."
-                        }
-                    }
+                    isLoading = false
+                    errorMessage = "Stream failed to load or ended instantly."
                 } else {
-                    // Normal finish
                     val finalDuration = maxOf(lastDurationSec, launchData.history.duration)
                     if (finalDuration > 0) {
                         DesktopDataStore.setLastWatched(
@@ -173,31 +159,17 @@ fun VlcjPlayerScreen(
             val posMs = engine.positionMs
             val durMs = engine.durationMs
             if (posMs > 0 && !isLoading) {
-                val posSec = posMs / 1000L
-                val durSec = durMs / 1000L
-                lastPositionSec = posSec
-                lastDurationSec = durSec
-
-                if (kotlin.math.abs(posSec - lastSavedPositionSec) >= 5) {
-                    lastSavedPositionSec = posSec
-                    DesktopDataStore.setLastWatched(
-                        launchData.history.copy(
-                            position = posSec,
-                            duration = durSec,
-                            updateTime = System.currentTimeMillis(),
-                        )
-                    )
-                }
+                lastPositionSec = posMs / 1000L
+                lastDurationSec = durMs / 1000L
             }
 
-            // Mark ready when first position reported
             if (posMs > 0 && isLoading) {
                 isLoading = false
             }
         }
     }
 
-    // ── UI ─────────────────────────────────────────────────────
+    // ── UI ─────────────────────────────────────────────────────────
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -239,46 +211,34 @@ fun VlcjPlayerScreen(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            // ── Video surface ──────────────────────────────────
+            // ── Video surface ────────────────────────────────────
             if (errorMessage == null && !isFinished && engineReady) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    key(currentLinkIndex) {
-                        VlcjVideoSurface(
-                            engine = engine,
-                            modifier = if (isLoading) Modifier.size(1.dp) else Modifier.fillMaxSize(),
-                            maintainAspectRatio = true,
-                        )
-                    }
+                    Vlcj2VideoSurface(
+                        engine = engine,
+                        modifier = if (isLoading) Modifier.size(1.dp) else Modifier.fillMaxSize(),
+                        maintainAspectRatio = true,
+                    )
                 }
             }
 
-            // ── Loading state ──────────────────────────────────
-            if (isLoading && errorMessage == null) {
+            // ── Loading state ────────────────────────────────────
+            if (isLoading && errorMessage == null && engineError == null) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 4.dp,
-                            modifier = Modifier.size(48.dp),
-                        )
-                        if (autoPlay && launchData.links.size > 1) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Trying link ${currentLinkIndex + 1} of ${launchData.links.size}...",
-                                color = MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    }
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 4.dp,
+                        modifier = Modifier.size(48.dp),
+                    )
                 }
             }
 
-            // ── Engine init error state ────────────────────────
+            // ── Engine init error ────────────────────────────────
             if (engineError != null) {
                 Column(
                     modifier = Modifier
@@ -288,7 +248,7 @@ fun VlcjPlayerScreen(
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
-                        text = "VLCJ Engine Error",
+                        text = "VLCJ2 Engine Error",
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
@@ -306,7 +266,7 @@ fun VlcjPlayerScreen(
                 }
             }
 
-            // ── Playback error state ───────────────────────────
+            // ── Playback error ───────────────────────────────────
             if (errorMessage != null) {
                 Column(
                     modifier = Modifier
@@ -334,7 +294,7 @@ fun VlcjPlayerScreen(
                 }
             }
 
-            // ── Finished state ─────────────────────────────────
+            // ── Finished state ───────────────────────────────────
             if (isFinished) {
                 Column(
                     modifier = Modifier
@@ -358,7 +318,7 @@ fun VlcjPlayerScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(onClick = {
                         if (isFullscreen) {
-                            windowState?.placement = WindowPlacement.Floating
+                            windowState.placement = WindowPlacement.Floating
                         }
                         launchData.onClosed?.invoke()
                         onClose()
