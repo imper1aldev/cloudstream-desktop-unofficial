@@ -42,4 +42,20 @@ allprojects {
     tasks.withType<AbstractTestTask>().configureEach {
         failOnNoDiscoveredTests = false
     }
+    
+    // Force Jackson version to Ktor-compatible 2.18.2 to resolve conflict between
+    // :library's strict 2.13.1 constraint and Ktor 3.0.3's requirement for 2.18.2.
+    // The :library submodule pins jackson-module-kotlin:{strictly 2.13.1} which
+    // blocks Gradle's automatic version upgrade when Ktor 3.0.3 needs 2.18.2+.
+    configurations.configureEach {
+        resolutionStrategy {
+            force(
+                "com.fasterxml.jackson.module:jackson-module-kotlin:2.18.2",
+                "com.fasterxml.jackson.core:jackson-databind:2.18.2",
+                "com.fasterxml.jackson.core:jackson-core:2.18.2",
+                "com.fasterxml.jackson.core:jackson-annotations:2.18.2",
+                "com.fasterxml.jackson:jackson-bom:2.18.2"
+            )
+        }
+    }
 }

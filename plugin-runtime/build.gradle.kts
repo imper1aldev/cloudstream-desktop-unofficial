@@ -13,12 +13,12 @@ dependencies {
     implementation(project(":common"))
 
     // Dalvik-to-JVM transcompiler
-    implementation("de.femtopedia.dex2jar:dex-tools:2.4.35")
+    implementation("de.femtopedia.dex2jar:dex2jar:2.4.36")
 
     // JSON for manifest parsing
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1")
 
     // ASM Bytecode Manipulation for Static Verification
-    implementation("org.ow2.asm:asm:9.6")
-    implementation("org.ow2.asm:asm-tree:9.6")
+    implementation("org.ow2.asm:asm:9.9")
+    implementation("org.ow2.asm:asm-tree:9.9")
 }

@@ -33,6 +33,9 @@ project(":plugin-runtime").projectDir = file("plugin-runtime")
 include(":player-abstraction")
 project(":player-abstraction").projectDir = file("player-abstraction")
 
+// include(":server-api")
+// project(":server-api").projectDir = file("server-api")
+
 include(":desktop-app")
 project(":desktop-app").projectDir = file("desktop-app")
 

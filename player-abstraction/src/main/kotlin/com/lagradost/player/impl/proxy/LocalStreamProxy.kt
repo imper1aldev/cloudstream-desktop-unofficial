@@ -163,8 +163,8 @@ object LocalStreamProxy {
                 contentTypeStr.contains("x-mpegURL", ignoreCase = true) ||
                 withContext(ProxyIoDispatcher) {
                     try {
-                        val s = response.body?.source()
-                        s != null && s.request(7) && s.peek().readUtf8(7) == "#EXTM3U"
+                        val s = response.body.source()
+                        s.request(7) && s.peek().readUtf8(7) == "#EXTM3U"
                     } catch (e: Exception) {
                         false
                     }
@@ -172,7 +172,7 @@ object LocalStreamProxy {
 
             if (isM3u8) {
                 val m3u8Content = withContext(ProxyIoDispatcher) {
-                    response.body?.string() ?: ""
+                    response.body.string()
                 }
                 val finalUrl = response.request.url.toString()
 
@@ -185,7 +185,7 @@ object LocalStreamProxy {
                 response.header("Content-Range")?.let { call.response.header("Content-Range", it) }
                 response.header("Accept-Ranges")?.let { call.response.header("Accept-Ranges", it) }
 
-                val cl = response.body?.contentLength() ?: -1L
+                val cl = response.body.contentLength()
                 val contentLengthParam = if (cl >= 0) cl else null
 
                 val parsedContentType = try {
@@ -200,7 +200,7 @@ object LocalStreamProxy {
                     status = HttpStatusCode.fromValue(response.code),
                     contentLength = contentLengthParam,
                 ) {
-                    val streamSource = response.body?.source() ?: return@respondBytesWriter
+                    val streamSource = response.body.source()
                     val buffer = ByteArray(16384)
                     try {
                         while (!isClosedForWrite) {
@@ -215,7 +215,7 @@ object LocalStreamProxy {
                         // Ignored (Client disconnected, e.g. user seeking)
                     } finally {
                         withContext(ProxyIoDispatcher) {
-                            response.body?.close()
+                            response.body.close()
                         }
                     }
                 }

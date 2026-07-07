@@ -5,10 +5,10 @@ import com.lagradost.cloudstream3.desktop.network.NetworkConfig
 import com.lagradost.cloudstream3.desktop.network.PlaywrightResolverImpl
 import com.lagradost.cloudstream3.desktop.utils.appScope
 import com.lagradost.cloudstream3.mapper
-import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.common.logging.AppLogger
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Request
 
 /**
  * Initializes all network-related subsystems:
@@ -76,17 +76,16 @@ fun initNetwork() {
     }
     mapper.registerModule(fallbackModule)
 
-    // Initialize WebViewResolver
-    WebViewResolver.webViewHandler = { request, callback ->
-        PlaywrightResolverImpl.resolve(request, callback)
-    }
-
-    // Bind the raw WebView stub to Playwright
+    // Bind the raw WebView stub to Playwright (new API: WebViewResolver is now instance-based)
     android.webkit.WebView.loadUrlHandler = java.util.function.Consumer { url ->
         appScope.launch {
-            WebViewResolver.webViewHandler?.invoke(
-                okhttp3.Request.Builder().url(url).build(),
-            ) { true }
+            try {
+                PlaywrightResolverImpl.resolve(
+                    okhttp3.Request.Builder().url(url).build(),
+                ) { true }
+            } catch (e: Exception) {
+                AppLogger.e("WebView loadUrl failed", e)
+            }
         }
     }
 

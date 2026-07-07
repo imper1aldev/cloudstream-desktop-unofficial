@@ -20,17 +20,14 @@ dependencies {
     implementation(project(":plugin-runtime"))
     implementation(project(":android-stubs"))
 
-    // Needs desktop-app to scan your Android stubs
-    implementation(project(":desktop-app"))
     implementation(project(":common"))
-    implementation(project(":player-abstraction"))
     implementation("org.bouncycastle:bcprov-jdk18on:1.77")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // ASM for bytecode analysis
-    implementation("org.ow2.asm:asm:9.7")
-    implementation("org.ow2.asm:asm-tree:9.7")
-    implementation("org.ow2.asm:asm-commons:9.7")
+    implementation("org.ow2.asm:asm:9.9")
+    implementation("org.ow2.asm:asm-tree:9.9")
+    implementation("org.ow2.asm:asm-commons:9.9")
 
     // JSON and Coroutines
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1")

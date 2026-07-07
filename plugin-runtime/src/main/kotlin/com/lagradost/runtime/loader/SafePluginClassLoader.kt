@@ -11,8 +11,11 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
         return try {
             super.loadClass(name, resolve)
         } catch (e: ClassNotFoundException) {
-            // If the plugin requests an Android API or CloudStream API that we haven't stubbed, generate a ghost stub
-            if (name.startsWith("android.") || name.startsWith("androidx.") || name.startsWith("com.android.") || name.startsWith("com.lagradost.") || name.startsWith("com.google.")) {
+            // Generate ghost stubs ONLY for Android APIs that aren't available.
+            // NEVER generate stubs for com.lagradost.cloudstream3.* (SDK base classes)
+            // or for classes that look like plugin entry points (*ProviderPlugin, *Plugin).
+            // Those MUST be loaded by the child URLClassLoader from the plugin jar.
+            if (name.startsWith("android.") || name.startsWith("androidx.") || name.startsWith("com.android.") || name.startsWith("com.google.")) {
                 generateGhostStub(name)
             } else {
                 throw e
@@ -132,7 +135,7 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
                 "java.io.Closeable",
                 "java.io.PrintStream",
                 "java.io.PrintWriter",
-                "java.io.ObjectStreamException"
+                "java.io.ObjectStreamException",
             )
             if (!safeIo.contains(name)) {
                 return true
@@ -170,7 +173,7 @@ class SafePluginClassLoader(parent: ClassLoader) : ClassLoader(parent) {
                 "java.lang.invoke.StringConcatFactory",
                 "java.lang.invoke.TypeDescriptor",
                 "java.lang.invoke.TypeDescriptor\$OfField",
-                "java.lang.invoke.TypeDescriptor\$OfMethod"
+                "java.lang.invoke.TypeDescriptor\$OfMethod",
             )
             if (!safeInvoke.contains(name)) {
                 return true

@@ -147,7 +147,7 @@ compose.desktop {
             // Windows only — no Mac or Linux targets
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
             packageName = "CloudStream-Desktop"
-            packageVersion = "0.1.0"
+            packageVersion = "0.1.1"
             description = "CloudStream Desktop Client"
             vendor = "CloudStream"
             includeAllModules = true  // Required — jlink cannot detect dynamically-loaded modules (JNA, Playwright, Conscrypt)
