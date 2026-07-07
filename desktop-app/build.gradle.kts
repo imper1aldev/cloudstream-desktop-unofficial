@@ -6,6 +6,7 @@ plugins {
     kotlin("jvm")
     id("org.jetbrains.compose") version "1.7.3"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
+    id("ir.mahozad.vlc-setup") version "0.1.0"
 }
 
 java {
@@ -65,8 +66,13 @@ dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.77")
     implementation("org.conscrypt:conscrypt-openjdk-uber:2.5.2")
 
-    // JNA for MPV
+    // JNA (kept — VLCJ uses it internally for libvlc native bindings)
     implementation("net.java.dev.jna:jna:5.14.0")
+
+    // VLCJ Direct Rendering
+    // No separate runtime dep needed — ir.mahozad.vlc-setup plugin embeds VLC binaries
+    implementation("uk.co.caprica:vlcj:4.8.2")
+    implementation("uk.co.caprica:vlcj-natives:4.8.0")
 
     // Compose Desktop UI
     implementation(compose.desktop.currentOs)
@@ -133,11 +139,23 @@ val stripPlaywrightDriver by tasks.registering {
     }
 }
 
+// VLC Setup configuration
+// Embeds VLC binaries from the vlc-setup Gradle plugin into app resources
+vlcSetup {
+    vlcVersion = "3.0.21"
+    shouldCompressVlcFiles = true
+    shouldIncludeAllVlcFiles = true
+    pathToCopyVlcWindowsFilesTo = rootDir.resolve("desktop-app/appResources/windows/vlc/")
+}
+
 // Compose Desktop application configuration
 compose.desktop {
     application {
         mainClass = "com.lagradost.cloudstream3.desktop.MainKt"
-        jvmArgs += listOf("-Djava.security.manager=allow")
+        jvmArgs += listOf(
+            "-Djava.security.manager=allow",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED", // Required by VLCJ NativeDiscoveryStrategy
+        )
 
         buildTypes.release.proguard {
             isEnabled.set(false)

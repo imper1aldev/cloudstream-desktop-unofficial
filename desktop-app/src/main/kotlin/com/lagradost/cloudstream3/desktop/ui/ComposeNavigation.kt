@@ -14,6 +14,8 @@ import com.lagradost.cloudstream3.desktop.ui.screens.ComposeExtensionScreen
 import com.lagradost.cloudstream3.desktop.ui.screens.ComposeHomeScreen
 import com.lagradost.cloudstream3.desktop.ui.screens.ComposeLibraryScreen
 
+import com.lagradost.cloudstream3.desktop.player.PlayerConfig
+import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.common.storage.WatchHistory
 
 
@@ -109,12 +111,20 @@ fun CloudstreamApp() {
                     }
                 }
 
-                // The Embedded Video Player Overlay
+                // The Embedded Video Player Overlay (VLCJ or MPV)
                 if (currentVideo != null) {
-                    com.lagradost.cloudstream3.desktop.ui.screens.player.EmbeddedVideoPlayer(
-                        launchData = currentVideo!!,
-                        onClose = { currentVideo = null },
-                    )
+                    val useVlcj = DesktopDataStore.getKey<Boolean>(PlayerConfig.PREF_USE_VLCJ) ?: false
+                    if (useVlcj) {
+                        com.lagradost.cloudstream3.desktop.ui.screens.player.VlcjPlayerScreen(
+                            launchData = currentVideo!!,
+                            onClose = { currentVideo = null },
+                        )
+                    } else {
+                        com.lagradost.cloudstream3.desktop.ui.screens.player.EmbeddedVideoPlayer(
+                            launchData = currentVideo!!,
+                            onClose = { currentVideo = null },
+                        )
+                    }
                 }
             }
             }

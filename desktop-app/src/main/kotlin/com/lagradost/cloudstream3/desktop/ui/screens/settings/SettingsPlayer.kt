@@ -20,6 +20,7 @@ fun SettingsPlayer() {
     var ytdlFormat by remember { mutableStateOf(DesktopDataStore.getKey<String>(PlayerConfig.PREF_YTDL_FORMAT) ?: "bestvideo[height<=?1080]+bestaudio/best") }
     var autoPlay by remember { mutableStateOf(DesktopDataStore.getKey<Boolean>(PlayerConfig.PREF_AUTO_PLAY) ?: true) }
     var autoPlayTimeout by remember { mutableStateOf(DesktopDataStore.getKey<String>(PlayerConfig.PREF_AUTO_PLAY_TIMEOUT) ?: "15000") }
+    var useVlcj by remember { mutableStateOf(DesktopDataStore.getKey<Boolean>(PlayerConfig.PREF_USE_VLCJ) ?: false) }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -27,6 +28,23 @@ fun SettingsPlayer() {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Video Player Options", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Engine selector: MPV / VLCJ
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Use VLCJ Engine (experimental)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Requires bundled libvlc. Restart player to apply.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = useVlcj,
+                    onCheckedChange = {
+                        useVlcj = it
+                        DesktopDataStore.setKey(PlayerConfig.PREF_USE_VLCJ, it)
+                    },
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Hardware Acceleration

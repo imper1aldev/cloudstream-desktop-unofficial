@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.desktop.init.initProviders
 import com.lagradost.cloudstream3.desktop.init.initProxy
 import com.lagradost.cloudstream3.desktop.init.initSecurity
 import com.lagradost.cloudstream3.desktop.init.launchAutoUpdater
+import com.lagradost.cloudstream3.desktop.player.vlcj.BundledVlcDiscovery
 import com.lagradost.cloudstream3.desktop.ui.CloudstreamApp
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
@@ -41,6 +42,7 @@ fun main() {
     initNetwork()
     initProviders()
     initPlugins()
+    BundledVlcDiscovery.discover()
     launchAutoUpdater()
 
     application {

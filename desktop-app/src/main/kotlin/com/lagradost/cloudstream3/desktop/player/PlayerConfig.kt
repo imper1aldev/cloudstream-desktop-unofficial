@@ -4,6 +4,7 @@ import com.lagradost.common.storage.DesktopDataStore
 import com.sun.jna.Pointer
 
 object PlayerConfig {
+    // MPV-era prefs (kept for backward compat, VLCJ may repurpose some)
     const val PREF_HWDEC = "player_hwdec"
     const val PREF_SUB_SIZE = "player_sub_size"
     const val PREF_SUB_COLOR = "player_sub_color"
@@ -11,6 +12,13 @@ object PlayerConfig {
     const val PREF_YTDL_FORMAT = "player_ytdl_format"
     const val PREF_AUTO_PLAY = "player_auto_play"
     const val PREF_AUTO_PLAY_TIMEOUT = "player_auto_play_timeout"
+
+    // VLCJ pref keys
+    const val PREF_USE_VLCJ = "player_use_vlcj"                 // Boolean — use VLCJ instead of MPV
+    const val PREF_HW_MODE = "player_hw_mode"                   // "none", "auto", "dxva2"
+    const val PREF_AUTO_PLAY_NEXT = "player_auto_play_next"     // Boolean
+    const val PREF_SKIP_INTRO_DURATION = "player_skip_intro_duration"       // String — seconds, default "90"
+    const val PREF_SKIP_INTRO_COMPENSATION = "player_skip_intro_compensation" // String — seconds, default "3"
 
     fun applyMpvSettings(handle: Pointer, lib: MpvLibrary) {
         // Hardware Acceleration (Default: auto-copy)
