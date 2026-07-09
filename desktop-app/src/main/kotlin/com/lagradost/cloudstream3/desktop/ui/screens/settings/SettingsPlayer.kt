@@ -63,6 +63,32 @@ fun SettingsPlayer() {
                 },
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Autoplay", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Autoplay Next Episode toggle
+            var autoPlayNext by remember { mutableStateOf(
+                DesktopDataStore.getKey<Boolean>(PlayerConfig.PREF_AUTO_PLAY_NEXT) ?: true
+            ) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Play next episode automatically",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = autoPlayNext,
+                    onCheckedChange = {
+                        autoPlayNext = it
+                        DesktopDataStore.setKey(PlayerConfig.PREF_AUTO_PLAY_NEXT, it)
+                    },
+                )
+            }
+
         }
     }
 }

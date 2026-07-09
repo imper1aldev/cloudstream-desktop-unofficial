@@ -6,6 +6,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
@@ -16,6 +19,8 @@ import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormat
 import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormatCallback
 import uk.co.caprica.vlcj.player.embedded.videosurface.callback.RenderCallback
 import uk.co.caprica.vlcj.player.embedded.videosurface.callback.format.RV32BufferFormat
+
+data class SubtitleTrackInfo(val id: Int, val name: String)
 
 /**
  * Minimal VLCJ engine for Phase 0 baseline validation.
@@ -74,6 +79,24 @@ class Vlcj2Engine {
     private val _isPlaying = AtomicBoolean(false)
     private val _isFinished = AtomicBoolean(false)
 
+    private var _displayCounter = AtomicInteger(0)
+
+    @Volatile
+    var isReinitializing: Boolean = false
+        private set
+
+    /**
+     * Thread-safe error callback. Invoked on [Dispatchers.Main] when a VLC playback error occurs.
+     * Set from any thread; the callback function will be dispatched to the Main thread.
+     */
+    var onError: ((message: String) -> Unit)? = null
+
+    // ── Last-playback state (for reinitialize) ────────────────────────
+    private var _lastUrl: String = ""
+    private var _lastTitle: String? = null
+    private var _lastHeaders: List<String>? = null
+    private var _lastStartMs: Long = 0L
+    private var _isHlsStream: Boolean = false
 
     // ── VLC args ─────────────────────────────────────────────────────
     /**
@@ -86,6 +109,7 @@ class Vlcj2Engine {
         "--no-osd",
         "--no-video-title-show",
         "--verbose=2",
+        "--avcodec-hw=none"
     )
 
     // ── Public state queries ─────────────────────────────────────────
@@ -104,6 +128,7 @@ class Vlcj2Engine {
 
     val currentFramePixels: ByteArray? get() = _framePixels.get()
 
+    val isHlsStream: Boolean get() = _isHlsStream
 
     // ── BufferFormatCallback — explicit object (NOT SAM lambda) ──────
 
@@ -145,6 +170,10 @@ class Vlcj2Engine {
     private val renderCb: RenderCallback = object : RenderCallback {
 
         override fun display(mediaPlayer: MediaPlayer, nativeBuffers: Array<ByteBuffer>, bufferFormat: BufferFormat) {
+            val count = _displayCounter.incrementAndGet()
+            if (count % 60 == 1) {
+                AppLogger.i("$TAG — [RENDER] display() alive count=$count isPlaying=${_isPlaying.get()}")
+            }
             val src = nativeBuffers[0]
             val w = this@Vlcj2Engine.videoWidth
             val h = this@Vlcj2Engine.videoHeight
@@ -186,6 +215,9 @@ class Vlcj2Engine {
 
         override fun error(mediaPlayer: MediaPlayer) {
             AppLogger.e("$TAG — [EVENT] error()")
+            onError?.let { cb ->
+                CoroutineScope(Dispatchers.Main).launch { cb("VLC playback error") }
+            }
         }
 
         override fun positionChanged(mediaPlayer: MediaPlayer, newPosition: Float) {
@@ -200,6 +232,14 @@ class Vlcj2Engine {
                 _durationMs.set(newLength)
                 AppLogger.i("$TAG — [EVENT] lengthChanged($newLength ms)")
             }
+        }
+
+        override fun buffering(mediaPlayer: MediaPlayer, newCache: Float) {
+            AppLogger.i("$TAG — [EVENT] buffering($newCache)")
+        }
+
+        override fun seekableChanged(mediaPlayer: MediaPlayer, newSeekable: Int) {
+            AppLogger.i("$TAG — [EVENT] seekableChanged(${if (newSeekable != 0) "seekable" else "not-seekable"})")
         }
     }
 
@@ -276,6 +316,7 @@ class Vlcj2Engine {
         title: String? = null,
         headers: List<String>? = null,
         startMs: Long = 0L,
+        isHls: Boolean = false,
     ) {
         val player = _mediaPlayer ?: run {
             AppLogger.e("$TAG — play() called before initialize()")
@@ -285,6 +326,14 @@ class Vlcj2Engine {
         _isFinished.set(false)
         _isPlaying.set(false)
         _framePixels.set(null)
+
+        // Save last-playback state for reinitialize()
+        _lastUrl = url
+        _lastTitle = title
+        _lastHeaders = headers
+        _lastStartMs = startMs
+        _isHlsStream = isHls
+
         AppLogger.i("$TAG — Phase 0.4: Opening stream: $url")
 
         // Build media options — ONLY start-time, title, and headers
@@ -345,13 +394,40 @@ class Vlcj2Engine {
      */
     fun seek(positionMs: Long) {
         val dur = _durationMs.get()
+        AppLogger.i("$TAG — [SEEK] positionMs=$positionMs dur=$dur thread=${Thread.currentThread().name}")
         if (dur > 0) {
             val ratio = (positionMs.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
-            _mediaPlayer?.controls()?.setPosition(ratio)
-            AppLogger.i("$TAG — [CTRL] seek($positionMs ms, ratio=$ratio)")
+            try {
+                _mediaPlayer?.controls()?.setPosition(ratio)
+                AppLogger.i("$TAG — [SEEK] OK ratio=$ratio")
+            } catch (e: Exception) {
+                AppLogger.e("$TAG — [SEEK] setPosition CRASHED", e)
+            }
         } else {
             AppLogger.w("$TAG — [CTRL] seek($positionMs ms) skipped: duration unknown")
         }
+    }
+
+    /**
+     * Seeks by stopping and restarting the current stream with :start-time.
+     * Required for HLS where controls().setPosition() crashes due to
+     * a race in libVLC's vout display lifecycle during segment transitions.
+     *
+     * Uses the same mechanism as server switch / resume, which works reliably.
+     */
+    fun seekByReopen(positionMs: Long) {
+        val savedUrl = _lastUrl
+        val savedTitle = _lastTitle
+        val savedHeaders = _lastHeaders
+
+        if (savedUrl.isBlank()) {
+            AppLogger.w("$TAG — seekByReopen: no last URL, skipping")
+            return
+        }
+
+        AppLogger.i("$TAG — [CTRL] seekByReopen($positionMs ms)")
+        stopForSwitch()  // sin marcar _isFinished
+        play(savedUrl, savedTitle, savedHeaders, positionMs, isHls = true)
     }
 
     /**
@@ -364,13 +440,105 @@ class Vlcj2Engine {
         AppLogger.i("$TAG — [CTRL] setVolume($clamped)")
     }
 
+    // ── Subpicture / Subtitle API (VLCJ 4.8.2 SubpictureApi) ────────
+
+    /**
+     * Returns the list of available subtitle tracks via VLCJ SubpictureApi.
+     * Uses [uk.co.caprica.vlcj.player.base.SubpictureApi.trackDescriptions].
+     */
+    fun subtitleTracks(): List<SubtitleTrackInfo> {
+        return _mediaPlayer?.subpictures()?.trackDescriptions()
+            ?.map { SubtitleTrackInfo(it.id(), it.description()) }
+            ?: emptyList()
+    }
+
+    /**
+     * Sets the active subtitle track by ID.
+     * Pass -1 to disable subtitles.
+     */
+    fun setSubtitleTrack(trackId: Int) {
+        _mediaPlayer?.subpictures()?.setTrack(trackId)
+    }
+
+    /**
+     * Loads an external subtitle file (e.g. .srt, .vtt).
+     * Returns true if the file was accepted by VLC.
+     */
+    fun setSubtitleFile(path: String): Boolean {
+        return _mediaPlayer?.subpictures()?.setSubTitleFile(path) ?: false
+    }
+
+    // ── HW mode reinitialize ──────────────────────────────────────────
+
+    /**
+     * Reinitialises the engine with a new hardware acceleration mode.
+     * Saves current position, releases, re-initializes with flags, and resumes playback.
+     *
+     * @param hwMode One of "software", "agresivo", or "default" (no flags).
+     * @return true if reinitialization succeeded, false on failure.
+     */
+    fun reinitialize(hwMode: String): Boolean {
+        if (isReinitializing) return false
+        isReinitializing = true
+        return try {
+            val savedPosition = _positionMs.get().coerceAtLeast(1)
+                .let { if (it > 0) it else _lastStartMs }
+            release()
+            val flags = when (hwMode) {
+                "software" -> listOf("--avcodec-hw=none")
+                "agresivo" -> listOf("--avcodec-hw=any", "--avcodec-dxva2")
+                else -> emptyList() // "default" → sin flags
+            }
+            initialize(extraArgs = flags)
+            play(_lastUrl, _lastTitle, _lastHeaders, savedPosition)
+            true
+        } catch (e: Exception) {
+            AppLogger.e("$TAG — reinitialize failed", e)
+            try {
+                // Guard: only re-initialize if release() actually destroyed the factory.
+                // If _factory is non-null, release() failed mid-way; reuse existing.
+                if (_factory == null) {
+                    AppLogger.i("$TAG — reinitialize recovery: attempting default init")
+                    initialize(extraArgs = emptyList())
+                } else {
+                    AppLogger.i("$TAG — reinitialize recovery: factory still present, reusing")
+                }
+                play(_lastUrl, _lastTitle, _lastHeaders, _lastStartMs)
+                true
+            } catch (e2: Exception) {
+                AppLogger.e("$TAG — reinitialize recovery also failed", e2)
+                onError?.let { cb ->
+                    CoroutineScope(Dispatchers.Main).launch {
+                        cb("No fue posible aplicar este modo de aceleración. Se restauró el modo predeterminado.")
+                    }
+                }
+                false
+            }
+        } finally {
+            isReinitializing = false
+        }
+    }
+
+    // ── Stop for hot-switch ───────────────────────────────────────────
+
+    /**
+     * Stops playback without setting [isFinished] to true.
+     * Used by hot-switch (server change) to preserve the "actively playing" state.
+     */
+    fun stopForSwitch() {
+        _mediaPlayer?.controls()?.stop()
+        _isPlaying.set(false)
+        _framePixels.set(null)
+        AppLogger.i("$TAG — [CTRL] stopForSwitch()")
+    }
+
     // ── Cleanup ──────────────────────────────────────────────────────
 
     /**
      * Releases all VLC resources. Safe to call multiple times.
      */
     fun release() {
-        AppLogger.i("$TAG — [CLEANUP] release() starting.")
+        AppLogger.i("$TAG — [CLEANUP] release() starting. thread=${Thread.currentThread().name}")
 
         _mediaPlayer?.release()
         _mediaPlayer = null
