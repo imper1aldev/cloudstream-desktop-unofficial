@@ -202,6 +202,7 @@ class Vlcj2Engine {
         override fun playing(mediaPlayer: MediaPlayer) {
             _isPlaying.set(true)
             _isFinished.set(false)
+            isReinitializing = false
             AppLogger.i("$TAG — [EVENT] playing()")
         }
 
@@ -434,8 +435,15 @@ class Vlcj2Engine {
         }
 
         AppLogger.i("$TAG — [CTRL] seekByReopen($positionMs ms)")
-        stopForSwitch()  // sin marcar _isFinished
-        play(savedUrl, savedTitle, savedHeaders, positionMs, isHls = true)
+        isReinitializing = true
+        try {
+            stopForSwitch()
+            play(savedUrl, savedTitle, savedHeaders, positionMs, isHls = true)
+        } catch (e: Exception) {
+            AppLogger.e("$TAG — seekByReopen failed", e)
+        } finally {
+            isReinitializing = false
+        }
     }
 
     /**

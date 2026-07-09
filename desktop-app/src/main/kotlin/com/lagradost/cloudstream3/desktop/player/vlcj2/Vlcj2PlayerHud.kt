@@ -82,7 +82,6 @@ fun Vlcj2PlayerHud(
     onMuteToggle: () -> Unit,
     onServerSelect: (Int) -> Unit,
     onSubtitleSelect: (Int) -> Unit,
-    onHwModeChange: (String) -> Unit,
     onSkipIntro: () -> Unit,
     onAutoplayNext: () -> Unit,
     onCancelAutoplay: () -> Unit,

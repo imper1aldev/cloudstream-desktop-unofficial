@@ -104,7 +104,6 @@ fun Vlcj2PlayerScreen(
         onMuteToggle = controller::toggleMute,
         onServerSelect = controller::switchServer,
         onSubtitleSelect = controller::setSubtitleTrack,
-        onHwModeChange = controller::setHwMode,
         onSkipIntro = controller::skipIntro,
         onAutoplayNext = { controller.retryNext() },
         onCancelAutoplay = { /* cancel logic handled inside HUD */ },
