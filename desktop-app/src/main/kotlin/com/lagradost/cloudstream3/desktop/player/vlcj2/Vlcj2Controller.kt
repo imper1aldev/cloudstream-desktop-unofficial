@@ -98,6 +98,7 @@ class Vlcj2Controller(private val engine: Vlcj2Engine) {
         }
     }
     fun setVolume(vol: Int) = engine.setVolume(vol)
+    fun toggleMute() = engine.toggleMute()
     fun skipIntro() = seek(engine.positionMs + 88_000L)
 
     fun setSubtitleTrack(trackId: Int) {

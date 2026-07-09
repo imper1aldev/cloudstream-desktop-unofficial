@@ -76,6 +76,8 @@ class Vlcj2Engine {
     private val _positionMs = AtomicLong(0L)
     private val _durationMs = AtomicLong(0L)
     private val _volume = AtomicInteger(100)
+    private val _muted = AtomicBoolean(false)
+    private val _previousVolume = AtomicInteger(100)
     private val _isPlaying = AtomicBoolean(false)
     private val _isFinished = AtomicBoolean(false)
 
@@ -123,6 +125,12 @@ class Vlcj2Engine {
     val durationMs: Long get() = _durationMs.get()
 
     val volume: Int get() = _volume.get()
+
+    val isMuted: Boolean get() = try {
+        _mediaPlayer?.audio()?.isMute() ?: _muted.get()
+    } catch (e: Exception) {
+        _muted.get()
+    }
 
     val isFinished: Boolean get() = _isFinished.get()
 
@@ -436,8 +444,29 @@ class Vlcj2Engine {
     fun setVolume(vol: Int) {
         val clamped = vol.coerceIn(0, 100)
         _volume.set(clamped)
-        _mediaPlayer?.audio()?.setVolume(clamped)
+        if (clamped > 0 && _muted.get()) {
+            setMute(false)
+        }
+        try {
+            _mediaPlayer?.audio()?.setVolume(clamped)
+        } catch (e: Exception) {
+            AppLogger.w("$TAG — [CTRL] setVolume failed", e)
+        }
         AppLogger.i("$TAG — [CTRL] setVolume($clamped)")
+    }
+
+    fun setMute(mute: Boolean) {
+        try {
+            _mediaPlayer?.audio()?.setMute(mute)
+        } catch (e: Exception) {
+            AppLogger.w("$TAG — [CTRL] setMute failed", e)
+        }
+        _muted.set(mute)
+        AppLogger.i("$TAG — [CTRL] setMute($mute)")
+    }
+
+    fun toggleMute() {
+        setMute(!isMuted)
     }
 
     // ── Subpicture / Subtitle API (VLCJ 4.8.2 SubpictureApi) ────────

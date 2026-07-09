@@ -79,6 +79,7 @@ fun Vlcj2PlayerHud(
     onPlayPause: () -> Unit,
     onSeek: (Float) -> Unit,
     onVolumeChange: (Int) -> Unit,
+    onMuteToggle: () -> Unit,
     onServerSelect: (Int) -> Unit,
     onSubtitleSelect: (Int) -> Unit,
     onHwModeChange: (String) -> Unit,
@@ -334,6 +335,7 @@ fun Vlcj2PlayerHud(
                         onPlayPause = onPlayPause,
                         onSeek = onSeek,
                         onVolumeChange = onVolumeChange,
+                        onMuteToggle = onMuteToggle,
                         subtitleTracks = subtitleTracks,
                         onSubtitleSelect = onSubtitleSelect,
                     )
@@ -452,6 +454,7 @@ private fun PlayerBottomBar(
     onPlayPause: () -> Unit,
     onSeek: (Float) -> Unit,
     onVolumeChange: (Int) -> Unit,
+    onMuteToggle: () -> Unit,
     subtitleTracks: List<SubtitleTrackInfo>,
     onSubtitleSelect: (Int) -> Unit,
 ) {
@@ -510,13 +513,14 @@ private fun PlayerBottomBar(
             onSelect = onSubtitleSelect,
         )
 
-        // Volume button
-        IconButton(onClick = { onVolumeChange(if (state.volume > 0) 0 else 80) }) {
+        // Mute button
+        IconButton(onClick = onMuteToggle) {
             Icon(
                 imageVector = when {
-                        state.volume == 0 -> Icons.AutoMirrored.Filled.VolumeOff
-                        state.volume < 50 -> Icons.AutoMirrored.Filled.VolumeDown
-                        else -> Icons.AutoMirrored.Filled.VolumeUp
+                    state.isMuted -> Icons.AutoMirrored.Filled.VolumeOff
+                    state.volume == 0 -> Icons.AutoMirrored.Filled.VolumeOff
+                    state.volume < 50 -> Icons.AutoMirrored.Filled.VolumeDown
+                    else -> Icons.AutoMirrored.Filled.VolumeUp
                 },
                 contentDescription = "Volume",
                 tint = Color.White,

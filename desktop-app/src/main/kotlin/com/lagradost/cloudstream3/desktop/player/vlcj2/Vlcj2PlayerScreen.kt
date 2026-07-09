@@ -101,6 +101,7 @@ fun Vlcj2PlayerScreen(
         onPlayPause = controller::togglePause,
         onSeek = { ratio -> controller.seek((ratio * engine.durationMs).toLong()) },
         onVolumeChange = controller::setVolume,
+        onMuteToggle = controller::toggleMute,
         onServerSelect = controller::switchServer,
         onSubtitleSelect = controller::setSubtitleTrack,
         onHwModeChange = controller::setHwMode,

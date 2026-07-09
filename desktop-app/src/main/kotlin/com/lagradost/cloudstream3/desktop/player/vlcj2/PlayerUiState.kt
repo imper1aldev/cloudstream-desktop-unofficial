@@ -16,6 +16,7 @@ sealed interface PlayerUiState {
         val durationMs: Long,
         val isPaused: Boolean,
         val volume: Int,
+        val isMuted: Boolean = false,
     ) : PlayerUiState
     data class Error(val message: String, val recoverable: Boolean = false) : PlayerUiState
     data object Finished : PlayerUiState
@@ -45,12 +46,14 @@ class PlayerStateFlow(private val engine: Vlcj2Engine) {
                                 durationMs = dur,
                                 isPaused = false,
                                 volume = vol,
+                                isMuted = engine.isMuted,
                             )
                             !playing && dur > 0L && !finished -> PlayerUiState.Playing(
                                 positionMs = pos,
                                 durationMs = dur,
                                 isPaused = true,
                                 volume = vol,
+                                isMuted = engine.isMuted,
                             )
                             finished -> PlayerUiState.Finished
                             else -> PlayerUiState.Idle
