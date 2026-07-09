@@ -79,7 +79,6 @@ fun Vlcj2PlayerHud(
     onVolumeChange: (Int) -> Unit,
     onServerSelect: (Int) -> Unit,
     onSubtitleSelect: (Int) -> Unit,
-    onHwModeChange: (String) -> Unit,
     onSkipIntro: () -> Unit,
     onAutoplayNext: () -> Unit,
     onCancelAutoplay: () -> Unit,
@@ -88,9 +87,6 @@ fun Vlcj2PlayerHud(
 ) {
     var isHudVisible by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableStateOf(0L) }
-
-    // Temporary local HW mode state (will come from parent in T13)
-    var currentHwMode by remember { mutableStateOf("default") }
 
     // Snapshot-aware isPlaying flag so LaunchedEffect reads latest value
     var isPlaying by remember { mutableStateOf(state is PlayerUiState.Playing) }
@@ -330,8 +326,6 @@ fun Vlcj2PlayerHud(
                         onVolumeChange = onVolumeChange,
                         subtitleTracks = subtitleTracks,
                         onSubtitleSelect = onSubtitleSelect,
-                        currentHwMode = currentHwMode,
-                        onHwModeChange = onHwModeChange,
                     )
                 }
             }
@@ -450,8 +444,6 @@ private fun PlayerBottomBar(
     onVolumeChange: (Int) -> Unit,
     subtitleTracks: List<SubtitleTrackInfo>,
     onSubtitleSelect: (Int) -> Unit,
-    currentHwMode: String,
-    onHwModeChange: (String) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -533,54 +525,8 @@ private fun PlayerBottomBar(
                 inactiveTrackColor = Color.White.copy(alpha = 0.3f),
             ),
         )
-
-        // HW acceleration mode selector
-        HwModeButton(
-            currentMode = currentHwMode,
-            onSelect = onHwModeChange,
-        )
     }
 }
-
-@Composable
-private fun HwModeButton(
-    currentMode: String,
-    onSelect: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                imageVector = Icons.Filled.Settings,
-                contentDescription = "Hardware Acceleration",
-                tint = Color.White,
-            )
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            listOf(
-                "software" to "Software decoding",
-                "default" to "Default",
-                "agresivo" to "Hardware decoding",
-            ).forEach { (mode, label) ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = label,
-                            fontWeight = if (mode == currentMode) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    },
-                    onClick = { onSelect(mode); expanded = false },
-                )
-            }
-        }
-    }
-}
-
 private fun formatTime(ms: Long): String {
     val totalSec = ms / 1000
     val hours = totalSec / 3600
