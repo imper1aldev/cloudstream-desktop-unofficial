@@ -22,8 +22,15 @@ import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.common.storage.WatchHistory
 import com.lagradost.player.impl.PlayerLinkHandler
 
+data class LinkPlayData(
+    val provider: MainAPI,
+    val dataUrl: String,
+    val history: WatchHistory,
+    val episodeName: String? = null,
+)
+
 @Composable
-fun EpisodeCard(ep: Episode, isLatest: Boolean, history: WatchHistory?, provider: MainAPI, data: LoadResponse, onPlay: (Triple<MainAPI, String, WatchHistory>) -> Unit) {
+fun EpisodeCard(ep: Episode, isLatest: Boolean, history: WatchHistory?, provider: MainAPI, data: LoadResponse, onPlay: (LinkPlayData) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -110,7 +117,7 @@ fun EpisodeCard(ep: Episode, isLatest: Boolean, history: WatchHistory?, provider
     }
 }
 
-fun navigateToPlay(provider: MainAPI, data: LoadResponse, ep: Episode, onPlay: (Triple<MainAPI, String, WatchHistory>) -> Unit) {
+fun navigateToPlay(provider: MainAPI, data: LoadResponse, ep: Episode, onPlay: (LinkPlayData) -> Unit) {
     val parentId = DesktopDataStore.watchHistoryId(
         apiName = provider.name,
         showUrl = data.url,
@@ -142,5 +149,5 @@ fun navigateToPlay(provider: MainAPI, data: LoadResponse, ep: Episode, onPlay: (
             patchedData = patchedData.replaceFirst("{", "{\"tvtype\":\"\",")
         }
     }
-    onPlay(Triple(provider, patchedData, history))
+    onPlay(LinkPlayData(provider, patchedData, history, ep.name))
 }

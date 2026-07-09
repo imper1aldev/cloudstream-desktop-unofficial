@@ -108,6 +108,10 @@ class Vlcj2Controller(private val engine: Vlcj2Engine) {
         engine.setSubtitleFile(path)
     }
 
+    fun setHwMode(mode: String) {
+        // HW mode switching not yet implemented for vlcj
+    }
+
     fun retryNext() {
         val nextIndex = _currentLinkIndex.value + 1
         if (nextIndex < _links.value.size) {

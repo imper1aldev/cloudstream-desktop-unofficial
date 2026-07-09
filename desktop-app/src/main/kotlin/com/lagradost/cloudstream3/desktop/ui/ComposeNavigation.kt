@@ -24,6 +24,7 @@ data class VideoLaunchData(
     val subtitles: List<com.lagradost.cloudstream3.SubtitleFile>,
     val startPositionMs: Long,
     val history: WatchHistory,
+    val episodeName: String? = null,
     val onError: ((String) -> Unit)? = null,
     val onClosed: (() -> Unit)? = null,
 )

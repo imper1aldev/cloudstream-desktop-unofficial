@@ -72,6 +72,8 @@ fun Vlcj2PlayerHud(
     currentLinkIndex: Int,
     subtitleTracks: List<SubtitleTrackInfo>,
     isEpisode: Boolean,
+    title: String? = null,
+    episodeName: String? = null,
     autoPlayEnabled: Boolean,
     toastMessage: String?,
     onPlayPause: () -> Unit,
@@ -79,6 +81,7 @@ fun Vlcj2PlayerHud(
     onVolumeChange: (Int) -> Unit,
     onServerSelect: (Int) -> Unit,
     onSubtitleSelect: (Int) -> Unit,
+    onHwModeChange: (String) -> Unit,
     onSkipIntro: () -> Unit,
     onAutoplayNext: () -> Unit,
     onCancelAutoplay: () -> Unit,
@@ -300,8 +303,15 @@ fun Vlcj2PlayerHud(
                         )
                     }
 
+                    val displayTitle = when {
+                        isEpisode -> {
+                            val base = title ?: "Now Playing"
+                            if (episodeName != null) "$base — $episodeName" else base
+                        }
+                        else -> title ?: "Now Playing"
+                    }
                     Text(
-                        text = links.getOrNull(currentLinkIndex)?.name ?: "Now Playing",
+                        text = displayTitle,
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,

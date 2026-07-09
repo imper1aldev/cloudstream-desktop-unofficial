@@ -131,8 +131,8 @@ class DetailsViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    private val _activeLinkData = MutableStateFlow<Triple<MainAPI, String, WatchHistory>?>(null)
-    val activeLinkData: StateFlow<Triple<MainAPI, String, WatchHistory>?> = _activeLinkData.asStateFlow()
+    private val _activeLinkData = MutableStateFlow<LinkPlayData?>(null)
+    val activeLinkData: StateFlow<LinkPlayData?> = _activeLinkData.asStateFlow()
 
     private val _isPanelOpen = MutableStateFlow(false)
     val isPanelOpen: StateFlow<Boolean> = _isPanelOpen.asStateFlow()
@@ -177,7 +177,7 @@ class DetailsViewModel(
         }
     }
 
-    fun openLinksPanel(data: Triple<MainAPI, String, WatchHistory>) {
+    fun openLinksPanel(data: LinkPlayData) {
         _activeLinkData.value = data
         _isPanelOpen.value = true
     }

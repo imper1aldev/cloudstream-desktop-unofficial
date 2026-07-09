@@ -39,7 +39,7 @@ private val vlcPlayer = VlcPlayer()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, onClose: () -> Unit) {
+fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, episodeName: String? = null, onClose: () -> Unit) {
     val links = remember { mutableStateListOf<ExtractorLink>() }
     val subtitles = remember { mutableStateListOf<SubtitleFile>() }
     var statusText by remember { mutableStateOf("Finding streams for you...") }
@@ -173,6 +173,7 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, on
                             subtitles = subtitles.filter { it.url.isNotBlank() },
                             startPositionMs = startMs,
                             history = history,
+                            episodeName = episodeName,
                             onError = { err ->
                                 embeddedError = err
                             },

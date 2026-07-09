@@ -107,7 +107,7 @@ fun ComposeDetailsScreen(navController: NavController, provider: MainAPI, url: S
                             modifier = Modifier
                                 .padding(top = 24.dp)
                                 .background(Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
-                                .clickable { if (isPanelOpen) viewModel.closeLinksPanel() else viewModel.openLinksPanel(activeLinkData!!) }
+                                .clickable { if (isPanelOpen) viewModel.closeLinksPanel() else activeLinkData?.let { viewModel.openLinksPanel(it) } }
                                 .padding(16.dp),
                         ) {
                             Icon(
@@ -131,14 +131,15 @@ fun ComposeDetailsScreen(navController: NavController, provider: MainAPI, url: S
                                     ),
                                 ),
                         ) {
-                            activeLinkData?.let { (linkProvider, linkUrl, linkHistory) ->
-                                LinksSidePanel(
-                                    provider = linkProvider,
-                                    dataUrl = linkUrl,
-                                    history = linkHistory,
-                                    onClose = { viewModel.closeLinksPanel() },
-                                )
-                            }
+                        activeLinkData?.let { playReq ->
+                            LinksSidePanel(
+                                provider = playReq.provider,
+                                dataUrl = playReq.dataUrl,
+                                history = playReq.history,
+                                episodeName = playReq.episodeName,
+                                onClose = { viewModel.closeLinksPanel() },
+                            )
+                        }
                         }
                     }
                 }
@@ -147,7 +148,7 @@ fun ComposeDetailsScreen(navController: NavController, provider: MainAPI, url: S
     }
 
 @Composable
-fun DetailsContent(navController: NavController, provider: MainAPI, data: LoadResponse, enrichmentTrigger: Int, isLoading: Boolean = false, onPlay: (Triple<MainAPI, String, WatchHistory>) -> Unit) {
+fun DetailsContent(navController: NavController, provider: MainAPI, data: LoadResponse, enrichmentTrigger: Int, isLoading: Boolean = false, onPlay: (com.lagradost.cloudstream3.desktop.ui.screens.details.LinkPlayData) -> Unit) {
     val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
     val hazeState = remember { HazeState() }
 
