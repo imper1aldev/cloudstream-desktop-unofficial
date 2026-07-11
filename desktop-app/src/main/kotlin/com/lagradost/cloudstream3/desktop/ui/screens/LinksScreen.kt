@@ -27,19 +27,21 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.desktop.ui.navigation.NavController
 import com.lagradost.cloudstream3.desktop.ui.components.DesktopUi
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.common.storage.WatchHistory
 import com.lagradost.player.impl.PlayerLinkHandler
 import com.lagradost.player.impl.VlcPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 private val vlcPlayer = VlcPlayer()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, episodeName: String? = null, onClose: () -> Unit) {
+fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, episodeName: String? = null, nextEpisodeDataUrl: String? = null, nextEpisodeName: String? = null, onClose: () -> Unit) {
     val links = remember { mutableStateListOf<ExtractorLink>() }
     val subtitles = remember { mutableStateListOf<SubtitleFile>() }
     var statusText by remember { mutableStateOf("Finding streams for you...") }
@@ -56,9 +58,16 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, ep
     var selectedQuality by remember { mutableStateOf<String?>(null) }
     var currentPlayingUrl by remember { mutableStateOf<String?>(null) }
 
-    val availableQualities = remember(links.size) { links.map { it.quality.toString() }.distinct().sorted() }
+    val qualityOptions = remember(links.size) {
+        links.map { it.quality }.distinct().sorted().associateBy { formatQualityFull(it) }
+    }
+    val availableQualities = remember(qualityOptions) { qualityOptions.keys.toList() }
     val filteredLinks = remember(links.size, selectedQuality) {
-        if (selectedQuality == null) links else links.filter { it.quality.toString() == selectedQuality }
+        if (selectedQuality == null) links
+        else {
+            val raw = qualityOptions[selectedQuality]
+            if (raw != null) links.filter { it.quality == raw } else links
+        }
     }
 
     val displayTitle = remember(history) {
@@ -134,6 +143,67 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, ep
         }
     }
 
+    val onNextEpisode: (() -> Unit)? = if (nextEpisodeDataUrl != null) {
+        {
+            coroutineScope.launch(Dispatchers.IO) {
+                withContext(Dispatchers.Main) {
+                    playVideo(null)
+                }
+
+                val newLinks = mutableListOf<ExtractorLink>()
+                val newSubs = mutableListOf<SubtitleFile>()
+
+                try {
+                    provider.loadLinks(
+                        data = nextEpisodeDataUrl,
+                        isCasting = false,
+                        subtitleCallback = { sub -> newSubs.add(sub) },
+                        callback = { link -> newLinks.add(link) },
+                    )
+                } catch (e: Exception) {
+                    com.lagradost.common.logging.AppLogger.e(
+                        "NextEpisode: failed to load links for $nextEpisodeDataUrl", e
+                    )
+                    return@launch
+                }
+
+                if (newLinks.isEmpty()) return@launch
+
+                val nextTitle = buildString {
+                    append(history.showName)
+                    if (history.season != null) {
+                        append(" - S${history.season}")
+                    }
+                    nextEpisodeName?.let { name ->
+                        append(" — $name")
+                    }
+                }
+
+                val nextHistory = history.copy(
+                    episodeId = nextEpisodeDataUrl,
+                    position = 0L,
+                    duration = 0L,
+                )
+
+                withContext(Dispatchers.Main) {
+                    playVideo(
+                        com.lagradost.cloudstream3.desktop.ui.VideoLaunchData(
+                            links = newLinks,
+                            initialIndex = 0,
+                            title = nextTitle,
+                            subtitles = newSubs,
+                            startPositionMs = 0L,
+                            history = nextHistory,
+                            episodeName = nextEpisodeName,
+                            onError = {},
+                            onClosed = {},
+                        )
+                    )
+                }
+            }
+        }
+    } else null
+
     val playLink: (ExtractorLink) -> Unit = { link ->
         if (!(isLaunchingPlayer && currentPlayingUrl == null)) {
             val validation = PlayerLinkHandler.validate(link, displayTitle)
@@ -182,6 +252,7 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, ep
                                 currentPlayingUrl = null
                                 statusText = "Ready — ${links.size} stream${if (links.size == 1) "" else "s"} available."
                             },
+                            onNextEpisode = onNextEpisode,
                         ),
                     )
                     statusText = "Playing in embedded player: ${link.name}"
@@ -342,6 +413,13 @@ fun LinksSidePanel(provider: MainAPI, dataUrl: String, history: WatchHistory, ep
         }
     }
 
+private fun formatQualityFull(quality: Int): String = when (quality) {
+    0 -> "Auto"
+    Qualities.Unknown.value -> "Original"
+    Qualities.P2160.value -> "4K"
+    else -> "${quality}p"
+}
+
 @Composable
 private fun StreamStatusCard(
     statusText: String,
@@ -460,7 +538,7 @@ private fun StreamLinkCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     buildString {
-                        append(link.quality.toString())
+                        append(formatQualityFull(link.quality))
                         append(" · ")
                         append(
                             if (link.isM3u8) {

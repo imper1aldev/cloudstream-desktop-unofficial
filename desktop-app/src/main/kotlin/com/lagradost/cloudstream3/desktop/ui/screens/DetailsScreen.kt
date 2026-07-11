@@ -137,6 +137,8 @@ fun ComposeDetailsScreen(navController: NavController, provider: MainAPI, url: S
                                 dataUrl = playReq.dataUrl,
                                 history = playReq.history,
                                 episodeName = playReq.episodeName,
+                                nextEpisodeDataUrl = playReq.nextEpisodeDataUrl,
+                                nextEpisodeName = playReq.nextEpisodeName,
                                 onClose = { viewModel.closeLinksPanel() },
                             )
                         }

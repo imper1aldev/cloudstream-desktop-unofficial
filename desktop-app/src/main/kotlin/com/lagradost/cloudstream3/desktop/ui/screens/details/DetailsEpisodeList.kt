@@ -27,6 +27,8 @@ data class LinkPlayData(
     val dataUrl: String,
     val history: WatchHistory,
     val episodeName: String? = null,
+    val nextEpisodeDataUrl: String? = null,
+    val nextEpisodeName: String? = null,
 )
 
 @Composable
@@ -149,5 +151,30 @@ fun navigateToPlay(provider: MainAPI, data: LoadResponse, ep: Episode, onPlay: (
             patchedData = patchedData.replaceFirst("{", "{\"tvtype\":\"\",")
         }
     }
-    onPlay(LinkPlayData(provider, patchedData, history, ep.name))
+    val nextEpisodeDataUrl: String?
+    val nextEpisodeName: String?
+    if (data is TvSeriesLoadResponse) {
+        val allSorted = data.episodes.sortedBy { (it.season ?: 1) * 10000 + (it.episode ?: 0) }
+        val currentIdx = allSorted.indexOfFirst { it.data == ep.data }
+        val nextEp = if (currentIdx >= 0 && currentIdx + 1 < allSorted.size) {
+            allSorted[currentIdx + 1]
+        } else null
+        nextEpisodeDataUrl = nextEp?.data
+        nextEpisodeName = nextEp?.name
+    } else if (data is AnimeLoadResponse) {
+        var found: Episode? = null
+        for ((_, eps) in data.episodes) {
+            val idx = eps.indexOfFirst { it.data == ep.data }
+            if (idx >= 0 && idx + 1 < eps.size) {
+                found = eps[idx + 1]
+                break
+            }
+        }
+        nextEpisodeDataUrl = found?.data
+        nextEpisodeName = found?.name
+    } else {
+        nextEpisodeDataUrl = null
+        nextEpisodeName = null
+    }
+    onPlay(LinkPlayData(provider, patchedData, history, ep.name, nextEpisodeDataUrl, nextEpisodeName))
 }

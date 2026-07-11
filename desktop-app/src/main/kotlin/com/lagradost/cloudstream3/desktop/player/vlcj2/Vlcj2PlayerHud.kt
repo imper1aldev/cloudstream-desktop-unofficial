@@ -30,6 +30,8 @@ import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
@@ -51,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,10 +63,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.common.logging.AppLogger
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val TAG = "Vlcj2PlayerHud"
+
+private fun formatQualityCompact(quality: Int): String = when (quality) {
+    0 -> "Auto"
+    Qualities.Unknown.value -> ""
+    Qualities.P2160.value -> "4K"
+    else -> "${quality}p"
+}
 
 @Composable
 fun Vlcj2PlayerHud(
@@ -86,6 +98,10 @@ fun Vlcj2PlayerHud(
     onAutoplayNext: () -> Unit,
     onCancelAutoplay: () -> Unit,
     onClose: () -> Unit,
+    isFullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
+    onNextEpisode: (() -> Unit)? = null,
+    showAutoplay: Boolean,
     content: @Composable () -> Unit,
 ) {
     var isHudVisible by remember { mutableStateOf(true) }
@@ -220,15 +236,18 @@ fun Vlcj2PlayerHud(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    if (autoPlayEnabled) {
+                    if (autoPlayEnabled && showAutoplay) {
                         var countdown by remember { mutableIntStateOf(5) }
+                        var autoplayCancelled by remember { mutableStateOf(false) }
 
                         LaunchedEffect(Unit) {
-                            while (countdown > 0) {
+                            while (countdown > 0 && !autoplayCancelled) {
                                 delay(1000)
                                 countdown--
                             }
-                            onAutoplayNext()
+                            if (!autoplayCancelled) {
+                                onAutoplayNext()
+                            }
                         }
 
                         Text(
@@ -237,7 +256,7 @@ fun Vlcj2PlayerHud(
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedButton(onClick = onCancelAutoplay) {
+                        OutlinedButton(onClick = { autoplayCancelled = true }) {
                             Text("Cancel")
                         }
                     } else {
@@ -345,6 +364,9 @@ fun Vlcj2PlayerHud(
                         onMuteToggle = onMuteToggle,
                         subtitleTracks = subtitleTracks,
                         onSubtitleSelect = onSubtitleSelect,
+                        isFullscreen = isFullscreen,
+                        onToggleFullscreen = onToggleFullscreen,
+                        onNextEpisode = onNextEpisode,
                     )
                 }
             }
@@ -441,7 +463,7 @@ private fun ServerDropdown(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            text = "${link.name} - ${link.quality}",
+                            text = let { val ql = formatQualityCompact(link.quality); if (ql.isEmpty()) link.name else "${link.name} - $ql" },
                             fontWeight = if (index == currentIndex) FontWeight.Bold else FontWeight.Normal,
                         )
                     },
@@ -464,6 +486,9 @@ private fun PlayerBottomBar(
     onMuteToggle: () -> Unit,
     subtitleTracks: List<SubtitleTrackInfo>,
     onSubtitleSelect: (Int) -> Unit,
+    isFullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
+    onNextEpisode: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -487,6 +512,30 @@ private fun PlayerBottomBar(
                 contentDescription = if (state.isPaused) "Play" else "Pause",
                 tint = Color.White,
             )
+        }
+
+        // Next Episode button (visible only when callback exists)
+        if (onNextEpisode != null) {
+            var debounced by remember { mutableStateOf(false) }
+            val debounceScope = rememberCoroutineScope()
+            IconButton(
+                onClick = {
+                    if (!debounced) {
+                        debounced = true
+                        onNextEpisode()
+                        debounceScope.launch {
+                            delay(1000)
+                            debounced = false
+                        }
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SkipNext,
+                    contentDescription = "Next Episode",
+                    tint = Color.White,
+                )
+            }
         }
 
         // Time display
@@ -546,6 +595,15 @@ private fun PlayerBottomBar(
                 inactiveTrackColor = Color.White.copy(alpha = 0.3f),
             ),
         )
+
+        // Fullscreen button — far right
+        IconButton(onClick = onToggleFullscreen) {
+            Icon(
+                imageVector = if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                contentDescription = if (isFullscreen) "Exit Fullscreen" else "Fullscreen",
+                tint = Color.White,
+            )
+        }
     }
 }
 private fun formatTime(ms: Long): String {

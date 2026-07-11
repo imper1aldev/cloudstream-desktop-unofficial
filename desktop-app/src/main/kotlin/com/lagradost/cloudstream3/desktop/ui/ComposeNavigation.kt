@@ -27,6 +27,7 @@ data class VideoLaunchData(
     val episodeName: String? = null,
     val onError: ((String) -> Unit)? = null,
     val onClosed: (() -> Unit)? = null,
+    val onNextEpisode: (() -> Unit)? = null,
 )
 
 val LocalVideoPlayer = androidx.compose.runtime.staticCompositionLocalOf<(VideoLaunchData?) -> Unit> { { } }
